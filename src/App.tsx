@@ -1,8 +1,135 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import "./App.css";
 
-function App() {
+// --- KEYBOARD CLEANER VIEW ---
+function Cleaner() {
+  const [progress, setProgress] = useState(0);
+  const [isHolding, setIsHolding] = useState(false);
+  const progressInterval = useRef<any>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Intercept and prevent all default actions
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (e.key === "Escape") {
+        if (!isHolding) {
+          setIsHolding(true);
+          const startTime = Date.now();
+          const duration = 2500; // 2.5 seconds holding time
+
+          progressInterval.current = setInterval(() => {
+            const elapsed = Date.now() - startTime;
+            const percentage = Math.min((elapsed / duration) * 100, 100);
+            setProgress(percentage);
+
+            if (percentage >= 100) {
+              clearInterval(progressInterval.current);
+              getCurrentWindow().close();
+            }
+          }, 50);
+        }
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (e.key === "Escape") {
+        setIsHolding(false);
+        setProgress(0);
+        if (progressInterval.current) {
+          clearInterval(progressInterval.current);
+        }
+      }
+    };
+
+    const handleMouseDown = (e: MouseEvent) => {
+      // Intercept all mouse clicks to prevent OS interaction
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    // Global listeners for key and mouse events
+    window.addEventListener("keydown", handleKeyDown, true);
+    window.addEventListener("keyup", handleKeyUp, true);
+    window.addEventListener("mousedown", handleMouseDown, true);
+    window.addEventListener("mouseup", handleMouseDown, true);
+    window.addEventListener("click", handleMouseDown, true);
+    window.addEventListener("contextmenu", handleMouseDown, true);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, true);
+      window.removeEventListener("keyup", handleKeyUp, true);
+      window.removeEventListener("mousedown", handleMouseDown, true);
+      window.removeEventListener("mouseup", handleMouseDown, true);
+      window.removeEventListener("click", handleMouseDown, true);
+      window.removeEventListener("contextmenu", handleMouseDown, true);
+      if (progressInterval.current) {
+        clearInterval(progressInterval.current);
+      }
+    };
+  }, [isHolding]);
+
+  return (
+    <div className="cleaner-container">
+      <div className="cleaner-content">
+        {/* Animated Radial / Circular Progress */}
+        <div className="progress-ring-wrapper">
+          <svg className="progress-ring" width="120" height="120">
+            {/* Background Circle */}
+            <circle
+              className="progress-ring-bg"
+              stroke="rgba(255, 255, 255, 0.08)"
+              strokeWidth="6"
+              fill="transparent"
+              r="50"
+              cx="60"
+              cy="60"
+            />
+            {/* Progress Stroke */}
+            <circle
+              className={`progress-ring-stroke ${isHolding ? "glowing" : ""}`}
+              stroke="#34c759"
+              strokeWidth="6"
+              strokeDasharray="314.16"
+              strokeDashoffset={314.16 - (314.16 * progress) / 100}
+              strokeLinecap="round"
+              fill="transparent"
+              r="50"
+              cx="60"
+              cy="60"
+            />
+          </svg>
+
+          {/* Central Status Icon */}
+          <div className={`cleaner-status-icon ${isHolding ? "pulse" : ""}`}>
+            <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+          </div>
+        </div>
+
+        <h1 className="cleaner-title">Klavye ve Trackpad Kilitli</h1>
+        <p className="cleaner-desc">
+          Cihazınızı güvenle temizleyebilirsiniz. Tüm tuşlar ve tıklamalar devre dışı bırakılmıştır.
+        </p>
+
+        <div className="cleaner-shortcut-badge">
+          <span>Çıkmak için <b>ESC</b> tuşunu basılı tutun</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- MAIN CONTROL PANEL VIEW ---
+function MainPanel() {
   const [darkMode, setDarkMode] = useState(false);
   const [caffeine, setCaffeine] = useState(false);
   const [desktopIcons, setDesktopIcons] = useState(true);
@@ -10,7 +137,6 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState("");
 
-  // Fetch initial states from macOS backend
   useEffect(() => {
     async function fetchStates() {
       try {
@@ -105,6 +231,17 @@ function App() {
     } catch (err) {
       console.error(err);
       showToast("Çöp sepeti boşaltılamadı");
+    }
+  };
+
+  const handleOpenCleaner = async () => {
+    try {
+      await invoke("open_cleaner_window");
+      // Hide the main dropdown menu when opening the cleaner fullscreen overlay
+      getCurrentWindow().hide();
+    } catch (err) {
+      console.error(err);
+      showToast("Temizlik modu başlatılamadı");
     }
   };
 
@@ -234,6 +371,35 @@ function App() {
           </button>
         </div>
 
+        {/* Prominent Keyboard Cleaner Feature Block */}
+        <div className="cleaner-launcher-card" onClick={handleOpenCleaner}>
+          <div className="cleaner-launcher-info">
+            <div className="cleaner-launcher-icon">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="4" width="20" height="16" rx="2" ry="2" />
+                <line x1="6" y1="8" x2="6.01" y2="8" />
+                <line x1="10" y1="8" x2="10.01" y2="8" />
+                <line x1="14" y1="8" x2="14.01" y2="8" />
+                <line x1="18" y1="8" x2="18.01" y2="8" />
+                <line x1="6" y1="12" x2="6.01" y2="12" />
+                <line x1="10" y1="12" x2="10.01" y2="12" />
+                <line x1="14" y1="12" x2="14.01" y2="12" />
+                <line x1="18" y1="12" x2="18.01" y2="12" />
+                <line x1="7" y1="16" x2="17" y2="16" />
+              </svg>
+            </div>
+            <div className="control-text">
+              <span className="control-title">Klavye & Trackpad Temizliği</span>
+              <span className="control-desc">Ekranı, klavyeyi ve fareyi kilitleyin</span>
+            </div>
+          </div>
+          <div className="cleaner-launcher-arrow">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </div>
+        </div>
+
         {/* Action Buttons Grid */}
         <div className="action-buttons-container">
           {/* Start Screen Saver */}
@@ -269,6 +435,22 @@ function App() {
       </footer>
     </div>
   );
+}
+
+// --- MASTER ROUTER ---
+function App() {
+  const [windowLabel, setWindowLabel] = useState("");
+
+  useEffect(() => {
+    // Detect which window context we are in (label is a string property in Tauri v2)
+    setWindowLabel(getCurrentWindow().label);
+  }, []);
+
+  if (windowLabel === "cleaner") {
+    return <Cleaner />;
+  }
+
+  return <MainPanel />;
 }
 
 export default App;

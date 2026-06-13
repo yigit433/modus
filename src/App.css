@@ -361,3 +361,169 @@ html, body {
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
+
+/* Cleaner Launcher Card */
+.cleaner-launcher-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.2s, border-color 0.2s;
+  margin-top: 4px;
+}
+
+.cleaner-launcher-card:hover {
+  background: var(--card-bg-hover);
+  border-color: rgba(255, 255, 255, 0.12);
+  transform: translateY(-0.5px);
+}
+
+@media (prefers-color-scheme: light) {
+  .cleaner-launcher-card:hover {
+    border-color: rgba(0, 0, 0, 0.12);
+  }
+}
+
+.cleaner-launcher-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cleaner-launcher-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #5856d6, #af52de);
+  color: #ffffff;
+  box-shadow: 0 0 8px rgba(88, 86, 214, 0.4);
+}
+
+.cleaner-launcher-arrow {
+  display: flex;
+  align-items: center;
+  color: var(--text-secondary);
+}
+
+/* Keyboard Cleaner Fullscreen Container */
+.cleaner-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: radial-gradient(circle at center, #1c1c1e, #0a0a0c);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+  color: #ffffff;
+  user-select: none;
+  animation: fadeIn 0.4s ease-out;
+}
+
+.cleaner-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 380px;
+  padding: 24px;
+}
+
+/* Progress Ring SVG styles */
+.progress-ring-wrapper {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.progress-ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: rotate(-90deg);
+}
+
+.progress-ring-stroke {
+  transition: stroke-dashoffset 0.05s linear, stroke 0.3s;
+}
+
+.progress-ring-stroke.glowing {
+  filter: drop-shadow(0 0 8px rgba(52, 199, 89, 0.8));
+}
+
+.cleaner-status-icon {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.4);
+  transition: color 0.3s, transform 0.3s;
+}
+
+.cleaner-status-icon.pulse {
+  color: #34c759;
+}
+
+.cleaner-status-icon.pulse svg {
+  animation: heartbeat 1.2s infinite alternate cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes heartbeat {
+  from {
+    transform: scale(0.95);
+    filter: drop-shadow(0 0 2px rgba(52, 199, 89, 0.3));
+  }
+  to {
+    transform: scale(1.1);
+    filter: drop-shadow(0 0 10px rgba(52, 199, 89, 0.8));
+  }
+}
+
+.cleaner-title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  margin-bottom: 8px;
+}
+
+.cleaner-desc {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.5;
+  margin-bottom: 28px;
+}
+
+.cleaner-shortcut-badge {
+  display: inline-block;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 8px 18px;
+  border-radius: 20px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.cleaner-shortcut-badge b {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: inherit;
+  font-weight: 700;
+  margin: 0 2px;
+}
+

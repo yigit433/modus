@@ -176,6 +176,38 @@ fn empty_trash() -> Result<(), String> {
     }
 }
 
+#[tauri::command]
+fn open_cleaner_window(app_handle: tauri::AppHandle) -> Result<(), String> {
+    // If the cleaner window is already open, focus it and return
+    if let Some(existing) = app_handle.get_webview_window("cleaner") {
+        let _ = existing.show();
+        let _ = existing.set_focus();
+        return Ok(());
+    }
+
+    // Create a new window that is fullscreen, borderless, always on top
+    let cleaner_window = tauri::WebviewWindowBuilder::new(
+        &app_handle,
+        "cleaner",
+        tauri::WebviewUrl::App("index.html".into()),
+    )
+    .title("Modus Keyboard Cleaner")
+    .fullscreen(true)
+    .decorations(false)
+    .always_on_top(true)
+    .visible(false)
+    .build();
+
+    match cleaner_window {
+        Ok(w) => {
+            let _ = w.show();
+            let _ = w.set_focus();
+            Ok(())
+        }
+        Err(e) => Err(format!("Klavye temizleme ekranı açılamadı: {}", e)),
+    }
+}
+
 // --- MAIN RUN ---
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -193,7 +225,8 @@ pub fn run() {
             get_mute,
             set_mute,
             start_screensaver,
-            empty_trash
+            empty_trash,
+            open_cleaner_window
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]
