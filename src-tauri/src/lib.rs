@@ -373,6 +373,7 @@ fn create_cursor_overlay(app_handle: &tauri::AppHandle) -> Result<tauri::Webview
     .skip_taskbar(true)
     .resizable(false)
     .shadow(false)
+    .focusable(false)
     .build()
     .map_err(|e| format!("Overlay penceresi oluşturulamadı: {}", e))?;
 

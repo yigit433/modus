@@ -986,12 +986,12 @@ html, body {
 
 @keyframes cursor-ripple-expand {
   0% {
-    transform: translate(-50%, -50%) scale(0.5);
+    transform: translate(-50%, -50%) var(--ripple-transform, ) scale(0.5);
     opacity: 1;
     border-color: rgba(var(--ripple-color), 0.7);
   }
   100% {
-    transform: translate(-50%, -50%) scale(2.2);
+    transform: translate(-50%, -50%) var(--ripple-transform, ) scale(2.2);
     opacity: 0;
     border-color: rgba(var(--ripple-color), 0.0);
   }

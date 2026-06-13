@@ -11,7 +11,7 @@ import "./App.css";
 interface CursorSettings {
   color: string;
   size: number;
-  shape: "circle" | "square" | "ring";
+  shape: "circle" | "square" | "ring" | "diamond";
   ripple: boolean;
 }
 
@@ -254,7 +254,8 @@ function CursorOverlay() {
 
       // Direct DOM manipulation for performance (avoids React re-render per frame)
       if (ringRef.current) {
-        ringRef.current.style.transform = `translate(${x}px, ${y}px)`;
+        ringRef.current.style.setProperty("--cursor-x", `${x}px`);
+        ringRef.current.style.setProperty("--cursor-y", `${y}px`);
       }
 
       if (clicked && currentSettings.ripple) {
@@ -282,7 +283,12 @@ function CursorOverlay() {
 
   const getRingStyle = () => {
     let borderRadius = "50%";
+    let transformBase = "";
     if (settings.shape === "square") borderRadius = "8px";
+    if (settings.shape === "diamond") {
+      borderRadius = "8px";
+      transformBase = " rotate(45deg)";
+    }
     
     let background = "transparent";
     let border = "none";
@@ -316,12 +322,18 @@ function CursorOverlay() {
       background,
       border,
       boxShadow,
-    };
+      transform: `translate(var(--cursor-x, 0px), var(--cursor-y, 0px))${transformBase}`,
+    } as React.CSSProperties;
   };
 
   const getRippleStyle = (x: number, y: number) => {
     let borderRadius = "50%";
+    let transformBase = "";
     if (settings.shape === "square") borderRadius = "8px";
+    if (settings.shape === "diamond") {
+      borderRadius = "8px";
+      transformBase = " rotate(45deg)";
+    }
     
     let rStr = "59, 130, 246"; // default blue
     if (settings.color.startsWith("#")) {
@@ -336,6 +348,7 @@ function CursorOverlay() {
       top: y,
       borderRadius,
       "--ripple-color": rStr,
+      "--ripple-transform": transformBase,
     } as React.CSSProperties;
   };
 
@@ -861,6 +874,7 @@ function MainPanel({ t, lang, changeLanguage }: MainPanelProps) {
                   <button className={`shape-btn ${cursorSettings.shape === "circle" ? "active" : ""}`} onClick={() => updateCursorSetting("shape", "circle")}>Daire</button>
                   <button className={`shape-btn ${cursorSettings.shape === "ring" ? "active" : ""}`} onClick={() => updateCursorSetting("shape", "ring")}>Halka</button>
                   <button className={`shape-btn ${cursorSettings.shape === "square" ? "active" : ""}`} onClick={() => updateCursorSetting("shape", "square")}>Kare</button>
+                  <button className={`shape-btn ${cursorSettings.shape === "diamond" ? "active" : ""}`} onClick={() => updateCursorSetting("shape", "diamond")}>Elmas</button>
                 </div>
               </div>
 
