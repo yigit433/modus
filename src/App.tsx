@@ -3,10 +3,25 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { TRANSLATIONS } from "./translations";
+import type { Language } from "./translations";
 import "./App.css";
 
+// Helper to determine the default browser language
+const getBrowserLanguage = (): Language => {
+  const code = navigator.language.split("-")[0].toLowerCase();
+  if (["en", "tr", "az", "es", "sq"].includes(code)) {
+    return code as Language;
+  }
+  return "en";
+};
+
 // --- KEYBOARD CLEANER VIEW ---
-function Cleaner() {
+interface CleanerProps {
+  t: (key: keyof typeof TRANSLATIONS["en"]) => string;
+}
+
+function Cleaner({ t }: CleanerProps) {
   const [progress, setProgress] = useState(0);
   const [isHolding, setIsHolding] = useState(false);
   const progressInterval = useRef<any>(null);
@@ -188,13 +203,11 @@ function Cleaner() {
           </div>
         </div>
 
-        <h1 className="cleaner-title">Klavye ve Trackpad Kilitli</h1>
-        <p className="cleaner-desc">
-          Cihazınızı güvenle temizleyebilirsiniz. Tüm tuşlar ve tıklamalar devre dışı bırakılmıştır.
-        </p>
+        <h1 className="cleaner-title">{t("cleanerScreenTitle")}</h1>
+        <p className="cleaner-desc">{t("cleanerScreenDesc")}</p>
 
         <div className="cleaner-shortcut-badge">
-          <span>Çıkmak için <b>Control + ESC</b> tuşlarını 3 saniye basılı tutun</span>
+          <span>{t("cleanerScreenBadge")}</span>
         </div>
       </div>
     </div>
@@ -202,7 +215,13 @@ function Cleaner() {
 }
 
 // --- MAIN CONTROL PANEL VIEW ---
-function MainPanel() {
+interface MainPanelProps {
+  t: (key: keyof typeof TRANSLATIONS["en"]) => string;
+  lang: Language;
+  changeLanguage: (newLang: Language) => void;
+}
+
+function MainPanel({ t, lang, changeLanguage }: MainPanelProps) {
   const [darkMode, setDarkMode] = useState(false);
   const [caffeine, setCaffeine] = useState(false);
   const [desktopIcons, setDesktopIcons] = useState(true);
@@ -302,10 +321,10 @@ function MainPanel() {
       const target = !darkMode;
       await invoke("set_dark_mode", { dark: target });
       setDarkMode(target);
-      showToast(target ? "Karanlık Mod Etkinleştirildi" : "Aydınlık Mod Etkinleştirildi");
+      showToast(target ? t("toastDarkModeOn") : t("toastDarkModeOff"));
     } catch (err) {
       console.error(err);
-      showToast("Karanlık mod değiştirilemedi");
+      showToast(t("toastDarkModeFail"));
     }
   };
 
@@ -314,10 +333,10 @@ function MainPanel() {
       const target = !caffeine;
       await invoke("set_caffeine", { active: target });
       setCaffeine(target);
-      showToast(target ? "Ekran Uyanık Tutuluyor" : "Uyanık Tutma Kapatıldı");
+      showToast(target ? t("toastCaffeineOn") : t("toastCaffeineOff"));
     } catch (err) {
       console.error(err);
-      showToast("Uyanık tutma ayarı değiştirilemedi");
+      showToast(t("toastCaffeineFail"));
     }
   };
 
@@ -326,10 +345,10 @@ function MainPanel() {
       const target = !desktopIcons;
       await invoke("set_desktop_icons", { show: target });
       setDesktopIcons(target);
-      showToast(target ? "Masaüstü Simgeleri Gösteriliyor" : "Masaüstü Simgeleri Gizlendi");
+      showToast(target ? t("toastDesktopOn") : t("toastDesktopOff"));
     } catch (err) {
       console.error(err);
-      showToast("Masaüstü simgeleri değiştirilemedi");
+      showToast(t("toastDesktopFail"));
     }
   };
 
@@ -338,30 +357,30 @@ function MainPanel() {
       const target = !mute;
       await invoke("set_mute", { mute: target });
       setMute(target);
-      showToast(target ? "Sistem Sesi Kısıldı" : "Sistem Sesi Açıldı");
+      showToast(target ? t("toastMuteOn") : t("toastMuteOff"));
     } catch (err) {
       console.error(err);
-      showToast("Ses durumu değiştirilemedi");
+      showToast(t("toastMuteFail"));
     }
   };
 
   const handleStartScreensaver = async () => {
     try {
       await invoke("start_screensaver");
-      showToast("Ekran Koruyucu Başlatılıyor...");
+      showToast(t("toastScreensaverStart"));
     } catch (err) {
       console.error(err);
-      showToast("Ekran koruyucu başlatılamadı");
+      showToast(t("toastScreensaverFail"));
     }
   };
 
   const handleEmptyTrash = async () => {
     try {
       await invoke("empty_trash");
-      showToast("Çöp Sepeti Boşaltıldı");
+      showToast(t("toastTrashEmpty"));
     } catch (err) {
       console.error(err);
-      showToast("Çöp sepeti boşaltılamadı");
+      showToast(t("toastTrashFail"));
     }
   };
 
@@ -372,7 +391,7 @@ function MainPanel() {
       getCurrentWindow().hide();
     } catch (err) {
       console.error(err);
-      showToast("Temizlik modu başlatılamadı");
+      showToast(t("toastCleanerFail"));
     }
   };
 
@@ -380,7 +399,7 @@ function MainPanel() {
     return (
       <div className="loading-screen">
         <div className="spinner"></div>
-        <span>macOS sistem durumu alınıyor...</span>
+        <span>{t("loading")}</span>
       </div>
     );
   }
@@ -398,34 +417,48 @@ function MainPanel() {
               <div className="about-logo-wrapper">
                 <div className="about-logo">M</div>
               </div>
-              <h2 className="about-title">Modus</h2>
-              <span className="about-subtitle">macOS Hızlı Erişim</span>
+              <h2 className="about-title">{t("appTitle")}</h2>
+              <span className="about-subtitle">{t("appSubtitle")}</span>
             </div>
 
             <div className="about-divider"></div>
 
             <div className="about-body">
               <div className="info-row">
-                <span className="info-label">Geliştirici</span>
+                <span className="info-label">{t("developer")}</span>
                 <span className="info-val">Yiğit Efe Avcı</span>
               </div>
               <div className="info-row">
-                <span className="info-label">GitHub</span>
+                <span className="info-label">{t("github")}</span>
                 <a href="https://github.com/yigit433/modus" target="_blank" rel="noopener noreferrer" className="info-val link">yigit433/modus</a>
               </div>
               <div className="info-row">
-                <span className="info-label">Sürüm</span>
+                <span className="info-label">{t("version")}</span>
                 <span className="info-val">v0.1.0</span>
+              </div>
+              <div className="info-row">
+                <span className="info-label">{t("selectLanguage")}</span>
+                <select 
+                  className="language-select" 
+                  value={lang} 
+                  onChange={(e) => changeLanguage(e.target.value as Language)}
+                >
+                  <option value="en">English</option>
+                  <option value="tr">Türkçe</option>
+                  <option value="az">Azərbaycanca</option>
+                  <option value="es">Español</option>
+                  <option value="sq">Shqip</option>
+                </select>
               </div>
               
               <div className="about-updater-section">
                 {updateStatus === "idle" && (
-                  <button className="updater-btn" onClick={handleCheckUpdates}>Güncellemeleri Denetle</button>
+                  <button className="updater-btn" onClick={handleCheckUpdates}>{t("checkUpdates")}</button>
                 )}
                 {updateStatus === "checking" && (
                   <div className="updater-status">
                     <div className="spinner-small"></div>
-                    <span>Güncellemeler denetleniyor...</span>
+                    <span>{t("checkingUpdates")}</span>
                   </div>
                 )}
                 {updateStatus === "uptodate" && (
@@ -433,18 +466,18 @@ function MainPanel() {
                     <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "4px" }}>
                       <polyline points="20 6 9 17 4 12" />
                     </svg>
-                    <span>Uygulamanız en güncel sürümde.</span>
+                    <span>{t("upToDate")}</span>
                   </div>
                 )}
                 {updateStatus === "available" && (
                   <div className="updater-available-wrapper" style={{ width: "100%" }}>
-                    <div className="updater-new-ver" style={{ fontSize: "11px", marginBottom: "6px", textAlign: "center" }}>Yeni sürüm mevcut: <b>v{newVersion}</b></div>
-                    <button className="updater-btn install" onClick={handleInstallUpdate}>İndir ve Yükle</button>
+                    <div className="updater-new-ver" style={{ fontSize: "11px", marginBottom: "6px", textAlign: "center" }}>{t("updateAvailable")} <b>v{newVersion}</b></div>
+                    <button className="updater-btn install" onClick={handleInstallUpdate}>{t("downloadInstall")}</button>
                   </div>
                 )}
                 {updateStatus === "downloading" && (
                   <div className="updater-download-wrapper">
-                    <span>Güncelleme indiriliyor... (%{Math.round(downloadProgress)})</span>
+                    <span>{t("downloadingUpdate")} ({Math.round(downloadProgress)}%)</span>
                     <div className="updater-progress-bar">
                       <div className="updater-progress-fill" style={{ width: `${downloadProgress}%` }}></div>
                     </div>
@@ -452,14 +485,16 @@ function MainPanel() {
                 )}
                 {updateStatus === "error" && (
                   <div className="updater-status error">
-                    <span>Güncelleme denetlenemedi.</span>
-                    <button className="updater-btn-retry" onClick={handleCheckUpdates}>Tekrar Dene</button>
+                    <span style={{ display: "block", textAlign: "center" }}>
+                      {t("updateError")} {errorMessage && <span style={{ fontSize: "9px", opacity: 0.8, display: "block" }}>{errorMessage}</span>}
+                    </span>
+                    <button className="updater-btn-retry" onClick={handleCheckUpdates}>{t("retry")}</button>
                   </div>
                 )}
               </div>
             </div>
 
-            <button className="about-close-btn" onClick={() => { setShowAbout(false); setUpdateStatus("idle"); }}>Kapat</button>
+            <button className="about-close-btn" onClick={() => { setShowAbout(false); setUpdateStatus("idle"); }}>{t("close")}</button>
           </div>
         </div>
       )}
@@ -468,8 +503,8 @@ function MainPanel() {
       <header className="app-header">
         <div className="header-top">
           <div className="header-titles">
-            <span className="app-title">Modus</span>
-            <span className="app-subtitle">macOS Hızlı Erişim</span>
+            <span className="app-title">{t("appTitle")}</span>
+            <span className="app-subtitle">{t("appSubtitle")}</span>
           </div>
           <button className="info-btn" onClick={() => setShowAbout(true)} aria-label="About App">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -506,8 +541,8 @@ function MainPanel() {
               </svg>
             </div>
             <div className="control-text">
-              <span className="control-title">Karanlık Mod</span>
-              <span className="control-desc">Sistem görünümünü değiştirin</span>
+              <span className="control-title">{t("darkModeTitle")}</span>
+              <span className="control-desc">{t("darkModeDesc")}</span>
             </div>
           </div>
           <button className={`toggle-switch ${darkMode ? "active" : ""}`} onClick={handleDarkModeToggle} aria-label="Toggle Dark Mode">
@@ -528,8 +563,8 @@ function MainPanel() {
               </svg>
             </div>
             <div className="control-text">
-              <span className="control-title">Uyanık Kal</span>
-              <span className="control-desc">Ekranın kapanmasını engelle</span>
+              <span className="control-title">{t("caffeineTitle")}</span>
+              <span className="control-desc">{t("caffeineDesc")}</span>
             </div>
           </div>
           <button className={`toggle-switch ${caffeine ? "active" : ""}`} onClick={handleCaffeineToggle} aria-label="Toggle Caffeine">
@@ -549,8 +584,8 @@ function MainPanel() {
               </svg>
             </div>
             <div className="control-text">
-              <span className="control-title">Masaüstü Simgeleri</span>
-              <span className="control-desc">Simge görünürlüğünü yönetin</span>
+              <span className="control-title">{t("desktopTitle")}</span>
+              <span className="control-desc">{t("desktopDesc")}</span>
             </div>
           </div>
           <button className={`toggle-switch ${!desktopIcons ? "active" : ""}`} onClick={handleDesktopIconsToggle} aria-label="Toggle Desktop Icons">
@@ -578,8 +613,8 @@ function MainPanel() {
               </svg>
             </div>
             <div className="control-text">
-              <span className="control-title">Sesi Sustur</span>
-              <span className="control-desc">Tüm sistem sesini kapatın</span>
+              <span className="control-title">{t("muteTitle")}</span>
+              <span className="control-desc">{t("muteDesc")}</span>
             </div>
           </div>
           <button className={`toggle-switch ${mute ? "active" : ""}`} onClick={handleMuteToggle} aria-label="Toggle Mute Status">
@@ -605,8 +640,8 @@ function MainPanel() {
               </svg>
             </div>
             <div className="control-text">
-              <span className="control-title">Klavye & Trackpad Temizliği</span>
-              <span className="control-desc">Ekranı, klavyeyi ve fareyi kilitleyin</span>
+              <span className="control-title">{t("cleanerTitle")}</span>
+              <span className="control-desc">{t("cleanerDesc")}</span>
             </div>
           </div>
           <div className="cleaner-launcher-arrow">
@@ -627,7 +662,7 @@ function MainPanel() {
                 <path d="M12 12h6" />
               </svg>
             </div>
-            <span className="action-btn-text">Ekran Koruyucu</span>
+            <span className="action-btn-text">{t("screensaver")}</span>
           </button>
 
           {/* Empty Trash */}
@@ -640,14 +675,14 @@ function MainPanel() {
                 <line x1="14" y1="11" x2="14.01" y2="11" />
               </svg>
             </div>
-            <span className="action-btn-text">Çöpü Boşalt</span>
+            <span className="action-btn-text">{t("emptyTrash")}</span>
           </button>
         </div>
       </div>
 
       {/* Footer */}
       <footer className="app-footer">
-        <span>v0.1.0 • Açık Kaynak</span>
+        <span>v0.1.0 • {t("openSource")}</span>
       </footer>
     </div>
   );
@@ -656,6 +691,22 @@ function MainPanel() {
 // --- MASTER ROUTER ---
 function App() {
   const [windowLabel, setWindowLabel] = useState("");
+  const [lang, setLang] = useState<Language>(() => {
+    const saved = localStorage.getItem("modus-language");
+    if (saved && ["en", "tr", "az", "es", "sq"].includes(saved)) {
+      return saved as Language;
+    }
+    return getBrowserLanguage();
+  });
+
+  const changeLanguage = (newLang: Language) => {
+    setLang(newLang);
+    localStorage.setItem("modus-language", newLang);
+  };
+
+  const t = (key: keyof typeof TRANSLATIONS["en"]): string => {
+    return TRANSLATIONS[lang][key] || TRANSLATIONS["en"][key] || "";
+  };
 
   useEffect(() => {
     // Detect which window context we are in (label is a string property in Tauri v2)
@@ -663,10 +714,10 @@ function App() {
   }, []);
 
   if (windowLabel === "cleaner") {
-    return <Cleaner />;
+    return <Cleaner t={t} />;
   }
 
-  return <MainPanel />;
+  return <MainPanel t={t} lang={lang} changeLanguage={changeLanguage} />;
 }
 
 export default App;

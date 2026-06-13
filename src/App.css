@@ -869,3 +869,53 @@ html, body {
   background: var(--card-bg-hover);
 }
 
+/* Language Select Dropdown */
+.language-select {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-family: inherit;
+  padding: 4px 24px 4px 8px;
+  border-radius: 6px;
+  outline: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22rgba(255,%20255,%20255,%200.7)%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C%2Fpolyline%3E%3C%2Fsvg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+
+.language-select:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+.language-select:focus {
+  border-color: var(--accent-color);
+}
+
+.language-select option {
+  background: #2c2c2e;
+  color: #ffffff;
+}
+
+@media (prefers-color-scheme: light) {
+  .language-select {
+    background: rgba(0, 0, 0, 0.04);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22rgba(0,%200,%200,%200.6)%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C%2Fpolyline%3E%3C%2Fsvg%3E");
+  }
+
+  .language-select:hover {
+    background-color: rgba(0, 0, 0, 0.08);
+  }
+  
+  .language-select option {
+    background: #ffffff;
+    color: #000000;
+  }
+}
+
+
