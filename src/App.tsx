@@ -8,18 +8,35 @@ function Cleaner() {
   const [progress, setProgress] = useState(0);
   const [isHolding, setIsHolding] = useState(false);
   const progressInterval = useRef<any>(null);
+  const keysPressed = useRef<{ [key: string]: boolean }>({});
 
   useEffect(() => {
+    const resetProgress = () => {
+      setIsHolding(false);
+      setProgress(0);
+      if (progressInterval.current) {
+        clearInterval(progressInterval.current);
+        progressInterval.current = null;
+      }
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
       // Intercept and prevent all default actions
       e.preventDefault();
       e.stopPropagation();
 
-      if (e.key === "Escape") {
+      // Track key states
+      keysPressed.current[e.key] = true;
+      
+      // We use Control + Escape. This is highly reliable on macOS and avoids Command-key system intercepts.
+      const isCtrlPressed = e.ctrlKey || keysPressed.current["Control"];
+      const isEscPressed = e.key === "Escape" || keysPressed.current["Escape"];
+
+      if (isCtrlPressed && isEscPressed) {
         if (!isHolding) {
           setIsHolding(true);
           const startTime = Date.now();
-          const duration = 2500; // 2.5 seconds holding time
+          const duration = 3000; // 3 seconds holding time
 
           progressInterval.current = setInterval(() => {
             const elapsed = Date.now() - startTime;
@@ -28,9 +45,14 @@ function Cleaner() {
 
             if (percentage >= 100) {
               clearInterval(progressInterval.current);
-              getCurrentWindow().close();
+              invoke("close_cleaner_window").catch(console.error);
             }
           }, 50);
+        }
+      } else {
+        // If other keys are pressed, reset the progress
+        if (e.key !== "Escape" && e.key !== "Control") {
+          resetProgress();
         }
       }
     };
@@ -39,12 +61,14 @@ function Cleaner() {
       e.preventDefault();
       e.stopPropagation();
 
-      if (e.key === "Escape") {
-        setIsHolding(false);
-        setProgress(0);
-        if (progressInterval.current) {
-          clearInterval(progressInterval.current);
-        }
+      keysPressed.current[e.key] = false;
+      
+      // If either Control or Escape is released, reset progress
+      const isCtrlPressed = e.ctrlKey;
+      const isEscPressed = keysPressed.current["Escape"];
+
+      if (!isCtrlPressed || !isEscPressed) {
+        resetProgress();
       }
     };
 
@@ -121,7 +145,7 @@ function Cleaner() {
         </p>
 
         <div className="cleaner-shortcut-badge">
-          <span>Çıkmak için <b>ESC</b> tuşunu basılı tutun</span>
+          <span>Çıkmak için <b>Control + ESC</b> tuşlarını 3 saniye basılı tutun</span>
         </div>
       </div>
     </div>
@@ -420,8 +444,8 @@ function MainPanel() {
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="3 6 5 6 21 6" />
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                <line x1="10" y1="11" x2="10" y2="17" />
-                <line x1="14" y1="11" x2="14" y2="17" />
+                <line x1="10" y1="11" x2="10.01" y2="11" />
+                <line x1="14" y1="11" x2="14.01" y2="11" />
               </svg>
             </div>
             <span className="action-btn-text">Çöpü Boşalt</span>

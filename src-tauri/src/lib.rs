@@ -208,6 +208,13 @@ fn open_cleaner_window(app_handle: tauri::AppHandle) -> Result<(), String> {
     }
 }
 
+#[tauri::command]
+fn close_cleaner_window(app_handle: tauri::AppHandle) {
+    if let Some(window) = app_handle.get_webview_window("cleaner") {
+        let _ = window.close();
+    }
+}
+
 // --- MAIN RUN ---
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -226,7 +233,8 @@ pub fn run() {
             set_mute,
             start_screensaver,
             empty_trash,
-            open_cleaner_window
+            open_cleaner_window,
+            close_cleaner_window
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]
