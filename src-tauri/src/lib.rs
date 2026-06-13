@@ -215,6 +215,11 @@ fn close_cleaner_window(app_handle: tauri::AppHandle) {
     }
 }
 
+#[tauri::command]
+fn quit_app(app_handle: tauri::AppHandle) {
+    app_handle.exit(0);
+}
+
 // --- MAIN RUN ---
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -236,7 +241,8 @@ pub fn run() {
             start_screensaver,
             empty_trash,
             open_cleaner_window,
-            close_cleaner_window
+            close_cleaner_window,
+            quit_app
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]

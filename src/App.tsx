@@ -683,6 +683,9 @@ function MainPanel({ t, lang, changeLanguage }: MainPanelProps) {
       {/* Footer */}
       <footer className="app-footer">
         <span>v0.1.0 • {t("openSource")}</span>
+        <button className="quit-btn" onClick={() => invoke("quit_app")} title={t("quitApp")}>
+          {t("quitApp")}
+        </button>
       </footer>
     </div>
   );

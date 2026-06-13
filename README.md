@@ -67,6 +67,21 @@ To compile the native production bundle (Universal Binary supporting both Apple 
 bun tauri build --target universal-apple-darwin
 ```
 
+### ⚠️ macOS Gatekeeper Warning / Bypass
+
+Since the application is unsigned (unless built with an Apple Developer Account), macOS might prevent it from running with a warning stating that the developer cannot be verified or that it might be malicious. 
+
+You can easily bypass this by clearing the quarantine flag:
+
+#### Terminal Bypass (Clear Quarantine - Recommended)
+After moving the app to your `/Applications` (Applications) folder, open your Terminal and run the following command to remove macOS's quarantine flag:
+
+```bash
+xattr -cr /Applications/modus.app
+```
+
+*(If the application is in another directory, simply replace the path with your `.app` file's location.)*
+
 ---
 
 ## 📦 CI/CD & Automated Releases

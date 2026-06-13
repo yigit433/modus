@@ -55,6 +55,7 @@ export const TRANSLATIONS = {
     close: "Close",
     selectLanguage: "Language",
     openSource: "Open Source",
+    quitApp: "Quit Modus",
     
     // Auto-updater
     checkUpdates: "Check for Updates",
@@ -120,6 +121,7 @@ export const TRANSLATIONS = {
     close: "Kapat",
     selectLanguage: "Dil",
     openSource: "Açık Kaynak",
+    quitApp: "Modus'tan Çık",
     
     // Auto-updater
     checkUpdates: "Güncellemeleri Denetle",
@@ -184,7 +186,8 @@ export const TRANSLATIONS = {
     version: "Versiya",
     close: "Bağla",
     selectLanguage: "Dil",
-    openSource: "Açiq Mənbə",
+    openSource: "Açıq Mənbə",
+    quitApp: "Modusdan Çıx",
     
     // Auto-updater
     checkUpdates: "Yeniləmələri Yoxla",
@@ -250,6 +253,7 @@ export const TRANSLATIONS = {
     close: "Cerrar",
     selectLanguage: "Idioma",
     openSource: "Código Abierto",
+    quitApp: "Salir de Modus",
     
     // Auto-updater
     checkUpdates: "Buscar Actualizaciones",
@@ -315,6 +319,7 @@ export const TRANSLATIONS = {
     close: "Mbyll",
     selectLanguage: "Gjuha",
     openSource: "Burim i Hapur",
+    quitApp: "Dil nga Modus",
     
     // Auto-updater
     checkUpdates: "Kërko për Përditësime",
