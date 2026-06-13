@@ -112,6 +112,11 @@ function Cleaner() {
 
   return (
     <div className="cleaner-container">
+      {/* Glassmorphic Animated Background Blobs */}
+      <div className="cleaner-bg-blob blob-1"></div>
+      <div className="cleaner-bg-blob blob-2"></div>
+      <div className="cleaner-bg-blob blob-3"></div>
+
       <div className="cleaner-content">
         {/* Animated Radial / Circular Progress */}
         <div className="progress-ring-wrapper">
