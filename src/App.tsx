@@ -414,8 +414,8 @@ function MainPanel({ t, lang, changeLanguage }: MainPanelProps) {
         <div className="about-overlay">
           <div className="about-modal">
             <div className="about-header">
-              <div className="about-logo-wrapper">
-                <div className="about-logo">M</div>
+              <div className="about-logo-container">
+                <img src="/modus_logo.svg" alt="Modus Logo" className="about-logo-img" />
               </div>
               <h2 className="about-title">{t("appTitle")}</h2>
               <span className="about-subtitle">{t("appSubtitle")}</span>
