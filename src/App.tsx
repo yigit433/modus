@@ -1,12 +1,26 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { listen, emit } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { TRANSLATIONS } from "./translations";
 import type { Language } from "./translations";
 import "./App.css";
+
+interface CursorSettings {
+  color: string;
+  size: number;
+  shape: "circle" | "square" | "ring";
+  ripple: boolean;
+}
+
+const DEFAULT_CURSOR_SETTINGS: CursorSettings = {
+  color: "#3b82f6",
+  size: 40,
+  shape: "circle",
+  ripple: true,
+};
 
 // Helper to determine the default browser language
 const getBrowserLanguage = (): Language => {
@@ -220,19 +234,30 @@ function Cleaner({ t }: CleanerProps) {
 function CursorOverlay() {
   const ringRef = useRef<HTMLDivElement>(null);
   const [ripples, setRipples] = useState<Array<{ id: number; x: number; y: number }>>([]);
+  const [settings, setSettings] = useState<CursorSettings>(() => {
+    const saved = localStorage.getItem("cursorSettings");
+    return saved ? JSON.parse(saved) : DEFAULT_CURSOR_SETTINGS;
+  });
+
+  const settingsRef = useRef(settings);
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
 
   useEffect(() => {
-    let unlisten: (() => void) | null = null;
+    let unlistenMove: (() => void) | null = null;
+    let unlistenSettings: (() => void) | null = null;
 
     listen<{ x: number; y: number; clicked: boolean }>("cursor-move", (event) => {
       const { x, y, clicked } = event.payload;
+      const currentSettings = settingsRef.current;
 
       // Direct DOM manipulation for performance (avoids React re-render per frame)
       if (ringRef.current) {
         ringRef.current.style.transform = `translate(${x}px, ${y}px)`;
       }
 
-      if (clicked) {
+      if (clicked && currentSettings.ripple) {
         const id = Date.now() + Math.random();
         setRipples((prev) => [...prev, { id, x, y }]);
         setTimeout(() => {
@@ -240,22 +265,88 @@ function CursorOverlay() {
         }, 600);
       }
     }).then((fn) => {
-      unlisten = fn;
+      unlistenMove = fn;
+    });
+
+    listen<CursorSettings>("cursor-settings-changed", (event) => {
+      setSettings(event.payload);
+    }).then((fn) => {
+      unlistenSettings = fn;
     });
 
     return () => {
-      if (unlisten) unlisten();
+      if (unlistenMove) unlistenMove();
+      if (unlistenSettings) unlistenSettings();
     };
   }, []);
 
+  const getRingStyle = () => {
+    let borderRadius = "50%";
+    if (settings.shape === "square") borderRadius = "8px";
+    
+    let background = "transparent";
+    let border = "none";
+    let boxShadow = "none";
+
+    const hexToRgba = (hex: string, alpha: number) => {
+      if (!hex.startsWith("#")) return hex; // Fallback
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    };
+
+    const isRing = settings.shape === "ring";
+
+    if (isRing) {
+      border = `3px solid ${hexToRgba(settings.color, 0.7)}`;
+      boxShadow = `0 0 10px 2px ${hexToRgba(settings.color, 0.4)}, inset 0 0 10px 2px ${hexToRgba(settings.color, 0.4)}`;
+    } else {
+      background = `radial-gradient(circle, ${hexToRgba(settings.color, 0.3)} 0%, ${hexToRgba(settings.color, 0.1)} 50%, transparent 70%)`;
+      border = `2px solid ${hexToRgba(settings.color, 0.5)}`;
+      boxShadow = `0 0 18px 4px ${hexToRgba(settings.color, 0.18)}`;
+    }
+
+    return {
+      width: `${settings.size}px`,
+      height: `${settings.size}px`,
+      marginLeft: `-${settings.size / 2}px`,
+      marginTop: `-${settings.size / 2}px`,
+      borderRadius,
+      background,
+      border,
+      boxShadow,
+    };
+  };
+
+  const getRippleStyle = (x: number, y: number) => {
+    let borderRadius = "50%";
+    if (settings.shape === "square") borderRadius = "8px";
+    
+    let rStr = "59, 130, 246"; // default blue
+    if (settings.color.startsWith("#")) {
+      const r = parseInt(settings.color.slice(1, 3), 16);
+      const g = parseInt(settings.color.slice(3, 5), 16);
+      const b = parseInt(settings.color.slice(5, 7), 16);
+      rStr = `${r}, ${g}, ${b}`;
+    }
+
+    return {
+      left: x,
+      top: y,
+      borderRadius,
+      "--ripple-color": rStr,
+    } as React.CSSProperties;
+  };
+
   return (
     <div className="cursor-overlay-container">
-      <div ref={ringRef} className="cursor-highlight-ring" />
+      <div ref={ringRef} className="cursor-highlight-ring" style={getRingStyle()} />
       {ripples.map((r) => (
         <div
           key={r.id}
           className="cursor-click-ripple"
-          style={{ left: r.x, top: r.y }}
+          style={getRippleStyle(r.x, r.y)}
         />
       ))}
     </div>
@@ -283,6 +374,19 @@ function MainPanel({ t, lang, changeLanguage }: MainPanelProps) {
   const [newVersion, setNewVersion] = useState("");
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState("");
+
+  const [showCursorSettings, setShowCursorSettings] = useState(false);
+  const [cursorSettings, setCursorSettings] = useState<CursorSettings>(() => {
+    const saved = localStorage.getItem("cursorSettings");
+    return saved ? JSON.parse(saved) : DEFAULT_CURSOR_SETTINGS;
+  });
+
+  const updateCursorSetting = (key: keyof CursorSettings, value: any) => {
+    const newSettings = { ...cursorSettings, [key]: value };
+    setCursorSettings(newSettings);
+    localStorage.setItem("cursorSettings", JSON.stringify(newSettings));
+    emit("cursor-settings-changed", newSettings);
+  };
 
   const handleCheckUpdates = async () => {
     setUpdateStatus("checking");
@@ -687,26 +791,87 @@ function MainPanel({ t, lang, changeLanguage }: MainPanelProps) {
         </div>
 
         {/* Cursor Highlight */}
-        <div className="control-card">
-          <div className="control-info">
-            <div className={`control-icon icon-cursor-highlight ${cursorHighlight ? "active" : ""}`}>
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10" opacity="0.4" />
-                <circle cx="12" cy="12" r="5" fill="currentColor" />
-                <path d="M12 2v2" />
-                <path d="M12 20v2" />
-                <path d="M2 12h2" />
-                <path d="M20 12h2" />
-              </svg>
+        <div className={`control-card ${showCursorSettings ? "expanded" : ""}`}>
+          <div className="control-info" style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <div className={`control-icon icon-cursor-highlight ${cursorHighlight ? "active" : ""}`}>
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" opacity="0.4" />
+                  <circle cx="12" cy="12" r="5" fill="currentColor" />
+                  <path d="M12 2v2" />
+                  <path d="M12 20v2" />
+                  <path d="M2 12h2" />
+                  <path d="M20 12h2" />
+                </svg>
+              </div>
+              <div className="control-text">
+                <span className="control-title">{t("cursorHighlightTitle")}</span>
+                <span className="control-desc">{t("cursorHighlightDesc")}</span>
+              </div>
             </div>
-            <div className="control-text">
-              <span className="control-title">{t("cursorHighlightTitle")}</span>
-              <span className="control-desc">{t("cursorHighlightDesc")}</span>
+            
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <button 
+                className={`gear-btn ${showCursorSettings ? "active" : ""}`}
+                onClick={() => setShowCursorSettings(!showCursorSettings)}
+                aria-label="Cursor Settings"
+                title="Ayarlar"
+              >
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+              </button>
+              <button className={`toggle-switch ${cursorHighlight ? "active" : ""}`} onClick={handleCursorHighlightToggle} aria-label="Toggle Cursor Highlight">
+                <span className="toggle-handle"></span>
+              </button>
             </div>
           </div>
-          <button className={`toggle-switch ${cursorHighlight ? "active" : ""}`} onClick={handleCursorHighlightToggle} aria-label="Toggle Cursor Highlight">
-            <span className="toggle-handle"></span>
-          </button>
+          
+          {showCursorSettings && (
+            <div className="cursor-settings-panel">
+              <div className="setting-row">
+                <span className="setting-label">Renk</span>
+                <div className="color-picker-group">
+                  {["#3b82f6", "#ef4444", "#22c55e", "#eab308", "#a855f7"].map((color) => (
+                    <button 
+                      key={color} 
+                      className={`color-swatch ${cursorSettings.color === color ? "active" : ""}`}
+                      style={{ backgroundColor: color }}
+                      onClick={() => updateCursorSetting("color", color)}
+                    />
+                  ))}
+                </div>
+              </div>
+              
+              <div className="setting-row">
+                <span className="setting-label">Boyut</span>
+                <input 
+                  type="range" 
+                  min="20" max="150" 
+                  value={cursorSettings.size} 
+                  onChange={(e) => updateCursorSetting("size", parseInt(e.target.value))}
+                  className="size-slider"
+                />
+              </div>
+
+              <div className="setting-row">
+                <span className="setting-label">Şekil</span>
+                <div className="shape-picker-group">
+                  <button className={`shape-btn ${cursorSettings.shape === "circle" ? "active" : ""}`} onClick={() => updateCursorSetting("shape", "circle")}>Daire</button>
+                  <button className={`shape-btn ${cursorSettings.shape === "ring" ? "active" : ""}`} onClick={() => updateCursorSetting("shape", "ring")}>Halka</button>
+                  <button className={`shape-btn ${cursorSettings.shape === "square" ? "active" : ""}`} onClick={() => updateCursorSetting("shape", "square")}>Kare</button>
+                </div>
+              </div>
+
+              <div className="setting-row">
+                <span className="setting-label">Tıklama Efekti</span>
+                <button className={`toggle-switch small ${cursorSettings.ripple ? "active" : ""}`} onClick={() => updateCursorSetting("ripple", !cursorSettings.ripple)}>
+                  <span className="toggle-handle"></span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Prominent Keyboard Cleaner Feature Block */}
