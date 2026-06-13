@@ -280,6 +280,7 @@ pub fn run() {
             let app_handle = app.handle().clone();
             let _tray = TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
+                .icon_as_template(true)
                 .on_tray_icon_event(move |_tray, event| {
                     if let TrayIconEvent::Click { rect, button_state, .. } = event {
                         // Crucial: Only react to MouseDown to toggle the window instantly.
