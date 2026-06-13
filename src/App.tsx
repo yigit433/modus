@@ -12,6 +12,8 @@ interface CursorSettings {
   color: string;
   size: number;
   shape: "circle" | "square" | "ring" | "diamond";
+  borderStyle: "solid" | "dashed" | "dotted";
+  animation: "none" | "spin" | "pulse";
   ripple: boolean;
   opacity: number;
   autoHide: boolean;
@@ -21,6 +23,8 @@ const DEFAULT_CURSOR_SETTINGS: CursorSettings = {
   color: "#3b82f6",
   size: 40,
   shape: "circle",
+  borderStyle: "dashed", // Kullanıcının istediği varsayılan çizgi çizgi
+  animation: "none",
   ripple: true,
   opacity: 1.0,
   autoHide: false,
@@ -320,17 +324,26 @@ function CursorOverlay() {
     };
 
     const isRing = settings.shape === "ring";
+    const bStyle = settings.borderStyle || "solid";
 
     if (isRing) {
-      border = `3px solid ${hexToRgba(settings.color, 0.7)}`;
+      border = `3px ${bStyle} ${hexToRgba(settings.color, 0.7)}`;
       boxShadow = `0 0 10px 2px ${hexToRgba(settings.color, 0.4)}, inset 0 0 10px 2px ${hexToRgba(settings.color, 0.4)}`;
     } else {
       background = `radial-gradient(circle, ${hexToRgba(settings.color, 0.3)} 0%, ${hexToRgba(settings.color, 0.1)} 50%, transparent 70%)`;
-      border = `2px solid ${hexToRgba(settings.color, 0.5)}`;
+      border = `2px ${bStyle} ${hexToRgba(settings.color, 0.5)}`;
       boxShadow = `0 0 18px 4px ${hexToRgba(settings.color, 0.18)}`;
     }
 
+    let animation = "none";
+    if (settings.animation === "spin") {
+      animation = "cursor-spin 4s linear infinite";
+    } else if (settings.animation === "pulse") {
+      animation = "cursor-pulse 2s ease-in-out infinite";
+    }
+
     return {
+      position: "absolute" as const,
       width: `${settings.size}px`,
       height: `${settings.size}px`,
       marginLeft: `-${settings.size / 2}px`,
@@ -339,10 +352,9 @@ function CursorOverlay() {
       background,
       border,
       boxShadow,
-      transform: `translate(var(--cursor-x, 0px), var(--cursor-y, 0px))${transformBase}`,
-      opacity: settings.autoHide ? 0 : settings.opacity,
-      transition: settings.autoHide ? "opacity 0.2s ease-out" : "none",
-    } as React.CSSProperties;
+      animation,
+      transform: transformBase.trim().length > 0 ? transformBase.trim() : "none",
+    };
   };
 
   const getRippleStyle = (x: number, y: number) => {
@@ -362,18 +374,37 @@ function CursorOverlay() {
       rStr = `${r}, ${g}, ${b}`;
     }
 
+    const bStyle = settings.borderStyle || "solid";
+
     return {
       left: x,
       top: y,
       borderRadius,
       "--ripple-color": rStr,
       "--ripple-transform": transformBase,
+      borderStyle: bStyle,
     } as React.CSSProperties;
   };
 
   return (
     <div className="cursor-overlay-container">
-      <div ref={ringRef} className="cursor-highlight-ring" style={getRingStyle()} />
+      <div 
+        ref={ringRef}
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: 0,
+          height: 0,
+          pointerEvents: "none",
+          zIndex: 999999,
+          transform: `translate(var(--cursor-x, 0px), var(--cursor-y, 0px))`,
+          opacity: settings.autoHide ? 0 : settings.opacity,
+          transition: settings.autoHide ? "opacity 0.2s ease-out" : "none",
+        }}
+      >
+        <div style={getRingStyle()} />
+      </div>
       {ripples.map((r) => (
         <div
           key={r.id}
@@ -894,6 +925,24 @@ function MainPanel({ t, lang, changeLanguage }: MainPanelProps) {
                   <button className={`shape-btn ${cursorSettings.shape === "ring" ? "active" : ""}`} onClick={() => updateCursorSetting("shape", "ring")}>Halka</button>
                   <button className={`shape-btn ${cursorSettings.shape === "square" ? "active" : ""}`} onClick={() => updateCursorSetting("shape", "square")}>Kare</button>
                   <button className={`shape-btn ${cursorSettings.shape === "diamond" ? "active" : ""}`} onClick={() => updateCursorSetting("shape", "diamond")}>Elmas</button>
+                </div>
+              </div>
+
+              <div className="setting-row">
+                <span className="setting-label">Stil</span>
+                <div className="shape-picker-group">
+                  <button className={`shape-btn ${cursorSettings.borderStyle === "solid" ? "active" : ""}`} onClick={() => updateCursorSetting("borderStyle", "solid")}>Düz</button>
+                  <button className={`shape-btn ${cursorSettings.borderStyle === "dashed" ? "active" : ""}`} onClick={() => updateCursorSetting("borderStyle", "dashed")}>Çizgili</button>
+                  <button className={`shape-btn ${cursorSettings.borderStyle === "dotted" ? "active" : ""}`} onClick={() => updateCursorSetting("borderStyle", "dotted")}>Noktalı</button>
+                </div>
+              </div>
+
+              <div className="setting-row">
+                <span className="setting-label">Animasyon</span>
+                <div className="shape-picker-group">
+                  <button className={`shape-btn ${cursorSettings.animation === "none" ? "active" : ""}`} onClick={() => updateCursorSetting("animation", "none")}>Sabit</button>
+                  <button className={`shape-btn ${cursorSettings.animation === "spin" ? "active" : ""}`} onClick={() => updateCursorSetting("animation", "spin")}>Dönme</button>
+                  <button className={`shape-btn ${cursorSettings.animation === "pulse" ? "active" : ""}`} onClick={() => updateCursorSetting("animation", "pulse")}>Nefes</button>
                 </div>
               </div>
 
