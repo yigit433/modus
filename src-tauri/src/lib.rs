@@ -4,6 +4,7 @@ use std::time::Instant;
 use tauri::tray::{TrayIconBuilder, TrayIconEvent, MouseButtonState};
 use tauri::{Manager, PhysicalPosition, PhysicalSize, Position};
 
+
 pub struct AppState {
     pub caffeine_child: Mutex<Option<Child>>,
     pub last_show_time: Mutex<Option<Instant>>,
@@ -215,10 +216,12 @@ fn close_cleaner_window(app_handle: tauri::AppHandle) {
     }
 }
 
+
 #[tauri::command]
 fn quit_app(app_handle: tauri::AppHandle) {
     app_handle.exit(0);
 }
+
 
 // --- MAIN RUN ---
 

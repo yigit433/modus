@@ -214,6 +214,7 @@ function Cleaner({ t }: CleanerProps) {
   );
 }
 
+
 // --- MAIN CONTROL PANEL VIEW ---
 interface MainPanelProps {
   t: (key: keyof typeof TRANSLATIONS["en"]) => string;
@@ -300,6 +301,7 @@ function MainPanel({ t, lang, changeLanguage }: MainPanelProps) {
         setCaffeine(caf);
         setDesktopIcons(dt);
         setMute(mt);
+
       } catch (err) {
         console.error("Failed to load initial macOS states:", err);
       } finally {
@@ -622,6 +624,8 @@ function MainPanel({ t, lang, changeLanguage }: MainPanelProps) {
           </button>
         </div>
 
+
+
         {/* Prominent Keyboard Cleaner Feature Block */}
         <div className="cleaner-launcher-card" onClick={handleOpenCleaner}>
           <div className="cleaner-launcher-info">
@@ -720,7 +724,10 @@ function App() {
     return <Cleaner t={t} />;
   }
 
+
+
   return <MainPanel t={t} lang={lang} changeLanguage={changeLanguage} />;
 }
 
 export default App;
+

@@ -15,7 +15,6 @@ export const TRANSLATIONS = {
     desktopDesc: "Toggle icon visibility",
     muteTitle: "Mute Sound",
     muteDesc: "Mute all system audio",
-    
     // Cleaner Card
     cleanerTitle: "Keyboard & Trackpad Cleaner",
     cleanerDesc: "Lock display, keyboard and mouse",
@@ -81,7 +80,6 @@ export const TRANSLATIONS = {
     desktopDesc: "Simge görünürlüğünü yönetin",
     muteTitle: "Sesi Sustur",
     muteDesc: "Tüm sistem sesini kapatın",
-    
     // Cleaner Card
     cleanerTitle: "Klavye & Trackpad Temizliği",
     cleanerDesc: "Ekranı, klavyeyi ve fareyi kilitleyin",
@@ -147,7 +145,6 @@ export const TRANSLATIONS = {
     desktopDesc: "Nişanların görünməsini idarə edin",
     muteTitle: "Səsi Səssiz Et",
     muteDesc: "Bütün sistem səsini söndürün",
-    
     // Cleaner Card
     cleanerTitle: "Klaviatura və Trekpad Təmizliyi",
     cleanerDesc: "Ekranı, klaviatura və siçanı kilidləyin",
@@ -213,7 +210,6 @@ export const TRANSLATIONS = {
     desktopDesc: "Cambia la visibilidad de iconos",
     muteTitle: "Silenciar Sonido",
     muteDesc: "Silencia todo el audio del sistema",
-    
     // Cleaner Card
     cleanerTitle: "Limpiador de Teclado y Trackpad",
     cleanerDesc: "Bloquea pantalla, teclado y ratón",
@@ -279,7 +275,6 @@ export const TRANSLATIONS = {
     desktopDesc: "Ndrysho dukshmërinë e ikonave",
     muteTitle: "Hesht Zërin",
     muteDesc: "Hesht të gjithë zërin e sistemit",
-    
     // Cleaner Card
     cleanerTitle: "Pastruesi i Tastierës",
     cleanerDesc: "Blloko ekranin, tastierën dhe mausin",
