@@ -56,6 +56,11 @@ function Cleaner() {
       e.preventDefault();
       e.stopPropagation();
 
+      // Ignore repeating key events to prevent console/IPC/State update flood
+      if (e.repeat) {
+        return;
+      }
+
       // Log raw details of keypress
       log(`KeyDown: key='${e.key}' code='${e.code}' ctrl='${e.ctrlKey}' meta='${e.metaKey}' repeat=${e.repeat}`);
 
@@ -87,7 +92,7 @@ function Cleaner() {
                 .then(() => log("close_cleaner_window invoked successfully"))
                 .catch(err => log(`Failed to invoke close_cleaner_window: ${err}`));
             }
-          }, 50);
+          }, 16);
         }
       } else {
         // If other keys are pressed, reset the progress
@@ -165,9 +170,39 @@ function Cleaner() {
               cx="60"
               cy="60"
             />
+            {/* Glow Outer Circle */}
+            {isHolding && (
+              <circle
+                className="progress-ring-glow-outer"
+                stroke="rgba(52, 199, 89, 0.2)"
+                strokeWidth="14"
+                strokeDasharray="314.16"
+                strokeDashoffset={314.16 - (314.16 * progress) / 100}
+                strokeLinecap="round"
+                fill="transparent"
+                r="50"
+                cx="60"
+                cy="60"
+              />
+            )}
+            {/* Glow Inner Circle */}
+            {isHolding && (
+              <circle
+                className="progress-ring-glow-inner"
+                stroke="rgba(52, 199, 89, 0.45)"
+                strokeWidth="10"
+                strokeDasharray="314.16"
+                strokeDashoffset={314.16 - (314.16 * progress) / 100}
+                strokeLinecap="round"
+                fill="transparent"
+                r="50"
+                cx="60"
+                cy="60"
+              />
+            )}
             {/* Progress Stroke */}
             <circle
-              className={`progress-ring-stroke ${isHolding ? "glowing" : ""}`}
+              className="progress-ring-stroke"
               stroke="#34c759"
               strokeWidth="6"
               strokeDasharray="314.16"

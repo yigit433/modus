@@ -457,11 +457,7 @@ html, body {
 }
 
 .progress-ring-stroke {
-  transition: stroke-dashoffset 0.05s linear, stroke 0.3s;
-}
-
-.progress-ring-stroke.glowing {
-  filter: drop-shadow(0 0 8px rgba(52, 199, 89, 0.8));
+  transition: stroke 0.3s;
 }
 
 .cleaner-status-icon {
