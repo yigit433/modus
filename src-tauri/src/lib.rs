@@ -1,10 +1,190 @@
+use std::process::Child;
+use std::sync::Mutex;
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
-use tauri::{Manager, Position, PhysicalPosition, PhysicalSize};
+use tauri::{Manager, PhysicalPosition, PhysicalSize, Position};
+
+#[derive(Default)]
+pub struct AppState {
+    pub caffeine_child: Mutex<Option<Child>>,
+}
+
+impl Drop for AppState {
+    fn drop(&mut self) {
+        let mut guard = self.caffeine_child.lock().unwrap();
+        if let Some(mut child) = guard.take() {
+            let _ = child.kill();
+        }
+    }
+}
+
+// --- COMMANDS ---
+
+#[tauri::command]
+fn get_dark_mode() -> bool {
+    let output = std::process::Command::new("defaults")
+        .args(&["read", "-g", "AppleInterfaceStyle"])
+        .output();
+
+    if let Ok(out) = output {
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        stdout.trim() == "Dark"
+    } else {
+        false
+    }
+}
+
+#[tauri::command]
+fn set_dark_mode(dark: bool) -> Result<(), String> {
+    let mode_str = if dark { "true" } else { "false" };
+    let script = format!(
+        "tell application \"System Events\" to tell appearance preferences to set dark mode to {}",
+        mode_str
+    );
+    let status = std::process::Command::new("osascript")
+        .args(&["-e", &script])
+        .status();
+
+    match status {
+        Ok(s) if s.success() => Ok(()),
+        _ => Err("Karanlık mod değiştirilemedi".into()),
+    }
+}
+
+#[tauri::command]
+fn get_caffeine(state: tauri::State<'_, AppState>) -> bool {
+    let guard = state.caffeine_child.lock().unwrap();
+    guard.is_some()
+}
+
+#[tauri::command]
+fn set_caffeine(state: tauri::State<'_, AppState>, active: bool) -> Result<(), String> {
+    let mut guard = state.caffeine_child.lock().unwrap();
+    if active {
+        if guard.is_none() {
+            let child = std::process::Command::new("caffeinate")
+                .args(&["-d"]) // keeps display awake
+                .spawn();
+            match child {
+                Ok(c) => {
+                    *guard = Some(c);
+                    Ok(())
+                }
+                Err(e) => Err(format!("Caffeinate başlatılamadı: {}", e)),
+            }
+        } else {
+            Ok(())
+        }
+    } else {
+        if let Some(mut child) = guard.take() {
+            let _ = child.kill();
+        }
+        Ok(())
+    }
+}
+
+#[tauri::command]
+fn get_desktop_icons() -> bool {
+    let output = std::process::Command::new("defaults")
+        .args(&["read", "com.apple.finder", "CreateDesktop"])
+        .output();
+
+    if let Ok(out) = output {
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let val = stdout.trim();
+        val != "false" && val != "0"
+    } else {
+        true
+    }
+}
+
+#[tauri::command]
+fn set_desktop_icons(show: bool) -> Result<(), String> {
+    let val = if show { "true" } else { "false" };
+    let status1 = std::process::Command::new("defaults")
+        .args(&["write", "com.apple.finder", "CreateDesktop", val])
+        .status();
+
+    let status2 = std::process::Command::new("killall")
+        .arg("Finder")
+        .status();
+
+    match (status1, status2) {
+        (Ok(s1), Ok(s2)) if s1.success() && s2.success() => Ok(()),
+        _ => Err("Masaüstü simgeleri durumu değiştirilemedi".into()),
+    }
+}
+
+#[tauri::command]
+fn get_mute() -> bool {
+    let output = std::process::Command::new("osascript")
+        .args(&["-e", "output muted of (get volume settings)"])
+        .output();
+
+    if let Ok(out) = output {
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        stdout.trim() == "true"
+    } else {
+        false
+    }
+}
+
+#[tauri::command]
+fn set_mute(mute: bool) -> Result<(), String> {
+    let mode_str = if mute { "with" } else { "without" };
+    let script = format!("set volume {} output muted", mode_str);
+    let status = std::process::Command::new("osascript")
+        .args(&["-e", &script])
+        .status();
+
+    match status {
+        Ok(s) if s.success() => Ok(()),
+        _ => Err("Ses durumu değiştirilemedi".into()),
+    }
+}
+
+#[tauri::command]
+fn start_screensaver() -> Result<(), String> {
+    let status = std::process::Command::new("open")
+        .args(&["-a", "ScreenSaverEngine"])
+        .status();
+
+    match status {
+        Ok(s) if s.success() => Ok(()),
+        _ => Err("Ekran koruyucu başlatılamadı".into()),
+    }
+}
+
+#[tauri::command]
+fn empty_trash() -> Result<(), String> {
+    let status = std::process::Command::new("osascript")
+        .args(&["-e", "tell application \"Finder\" to empty trash"])
+        .status();
+
+    match status {
+        Ok(s) if s.success() => Ok(()),
+        _ => Err("Çöp sepeti boşaltılamadı".into()),
+    }
+}
+
+// --- MAIN RUN ---
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .manage(AppState::default())
+        .invoke_handler(tauri::generate_handler![
+            get_dark_mode,
+            set_dark_mode,
+            get_caffeine,
+            set_caffeine,
+            get_desktop_icons,
+            set_desktop_icons,
+            get_mute,
+            set_mute,
+            start_screensaver,
+            empty_trash
+        ])
         .setup(|app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
