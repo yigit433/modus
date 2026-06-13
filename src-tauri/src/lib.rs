@@ -1,11 +1,21 @@
 use std::process::Child;
 use std::sync::Mutex;
-use tauri::tray::{TrayIconBuilder, TrayIconEvent};
+use std::time::Instant;
+use tauri::tray::{TrayIconBuilder, TrayIconEvent, MouseButtonState};
 use tauri::{Manager, PhysicalPosition, PhysicalSize, Position};
 
-#[derive(Default)]
 pub struct AppState {
     pub caffeine_child: Mutex<Option<Child>>,
+    pub last_show_time: Mutex<Option<Instant>>,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            caffeine_child: Mutex::new(None),
+            last_show_time: Mutex::new(None),
+        }
+    }
 }
 
 impl Drop for AppState {
@@ -201,11 +211,25 @@ pub fn run() {
             )
             .expect("Failed to apply vibrancy");
 
-            // Hide on blur
+            // Hide on blur (with a safety threshold to prevent closing on startup/drag)
             let main_window_clone = main_window.clone();
+            let app_handle_clone = app.handle().clone();
             main_window.on_window_event(move |event| {
-                if let tauri::WindowEvent::Focused(false) = event {
-                    main_window_clone.hide().unwrap();
+                if let tauri::WindowEvent::Focused(focused) = event {
+                    if !focused {
+                        let last_show = {
+                            let state = app_handle_clone.state::<AppState>();
+                            let guard = state.last_show_time.lock().unwrap();
+                            *guard
+                        };
+                        let should_hide = match last_show {
+                            Some(time) => time.elapsed().as_millis() > 300,
+                            None => true,
+                        };
+                        if should_hide {
+                            main_window_clone.hide().unwrap();
+                        }
+                    }
                 }
             });
 
@@ -214,13 +238,22 @@ pub fn run() {
             let _tray = TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
                 .on_tray_icon_event(move |_tray, event| {
-                    if let TrayIconEvent::Click { rect, .. } = event {
+                    if let TrayIconEvent::Click { rect, button_state, .. } = event {
+                        // Crucial: Only react to MouseDown to toggle the window instantly.
+                        // If we don't filter, MouseUp will trigger a second event which immediately hides the window!
+                        if button_state == MouseButtonState::Up {
+                            return;
+                        }
+
                         let window = app_handle.get_webview_window("main").unwrap();
                         let is_visible = window.is_visible().unwrap_or(false);
                         if is_visible {
                             window.hide().unwrap();
                         } else {
-                            // Safely extract coordinates from Physical/Logical variants
+                            // Update the last show time
+                            *app_handle.state::<AppState>().last_show_time.lock().unwrap() = Some(Instant::now());
+
+                            // Calculate position below the tray icon
                             let (tray_x, tray_y) = match rect.position {
                                 Position::Physical(p) => (p.x as f64, p.y as f64),
                                 Position::Logical(l) => (l.x, l.y),
