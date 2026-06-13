@@ -16,11 +16,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: lts/*
-          cache: "npm"
+          bun-version: latest
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -28,7 +27,7 @@ jobs:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: bun install --frozen-lockfile
 
       - name: Build and package Tauri app
         uses: tauri-apps/tauri-action@v0.6.0
@@ -43,4 +42,4 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: --target universal-apple-darwin
-          tauriScript: npm run tauri
+          tauriScript: bun tauri
