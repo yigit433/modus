@@ -215,11 +215,6 @@ fn close_cleaner_window(app_handle: tauri::AppHandle) {
     }
 }
 
-#[tauri::command]
-fn log_cleaner(msg: String) {
-    println!("[Cleaner Debug] {}", msg);
-}
-
 // --- MAIN RUN ---
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -239,8 +234,7 @@ pub fn run() {
             start_screensaver,
             empty_trash,
             open_cleaner_window,
-            close_cleaner_window,
-            log_cleaner
+            close_cleaner_window
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]

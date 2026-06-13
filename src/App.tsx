@@ -7,41 +7,16 @@ import "./App.css";
 function Cleaner() {
   const [progress, setProgress] = useState(0);
   const [isHolding, setIsHolding] = useState(false);
-  const [debugLogs, setDebugLogs] = useState<string[]>([]);
   const progressInterval = useRef<any>(null);
   const keysPressed = useRef<{ [key: string]: boolean }>({});
   const isHoldingRef = useRef(false);
 
-  const log = (msg: string) => {
-    const timestamp = new Date().toLocaleTimeString();
-    const formattedMsg = `[${timestamp}] ${msg}`;
-    setDebugLogs(prev => [formattedMsg, ...prev].slice(0, 15));
-    console.log(formattedMsg);
-    invoke("log_cleaner", { msg: formattedMsg }).catch(e => console.error("Rust logging failed", e));
-  };
-
   useEffect(() => {
-    log("Cleaner screen loaded.");
-
-    // Track window focus/blur
-    const handleFocus = () => log("DOM Window got FOCUS");
-    const handleBlur = () => log("DOM Window lost FOCUS");
-    window.addEventListener("focus", handleFocus);
-    window.addEventListener("blur", handleBlur);
-
-    // Initial focus check
-    log(`Document has focus initially: ${document.hasFocus()}`);
-
     // Try to force focus on window load
     const win = getCurrentWindow();
-    win.setFocus()
-      .then(() => log("Forced window focus command sent"))
-      .catch(err => log(`Could not force window focus: ${err}`));
+    win.setFocus().catch(() => {});
 
     const resetProgress = () => {
-      if (isHoldingRef.current) {
-        log("Resetting progress: holding stopped");
-      }
       isHoldingRef.current = false;
       setIsHolding(false);
       setProgress(0);
@@ -56,13 +31,10 @@ function Cleaner() {
       e.preventDefault();
       e.stopPropagation();
 
-      // Ignore repeating key events to prevent console/IPC/State update flood
+      // Ignore repeating key events to prevent performance lag
       if (e.repeat) {
         return;
       }
-
-      // Log raw details of keypress
-      log(`KeyDown: key='${e.key}' code='${e.code}' ctrl='${e.ctrlKey}' meta='${e.metaKey}' repeat=${e.repeat}`);
 
       // Track key states
       keysPressed.current[e.key] = true;
@@ -70,11 +42,8 @@ function Cleaner() {
       const isCtrlPressed = e.ctrlKey || keysPressed.current["Control"];
       const isEscPressed = e.key === "Escape" || keysPressed.current["Escape"];
 
-      log(`Key Check - ctrlPressed=${isCtrlPressed}, escPressed=${isEscPressed}, isHolding=${isHoldingRef.current}`);
-
       if (isCtrlPressed && isEscPressed) {
         if (!isHoldingRef.current) {
-          log("Shortcut detected! Starting 3-second hold countdown...");
           isHoldingRef.current = true;
           setIsHolding(true);
           const startTime = Date.now();
@@ -86,18 +55,14 @@ function Cleaner() {
             setProgress(percentage);
 
             if (percentage >= 100) {
-              log("Progress reached 100%! Invoking close_cleaner_window...");
               clearInterval(progressInterval.current);
-              invoke("close_cleaner_window")
-                .then(() => log("close_cleaner_window invoked successfully"))
-                .catch(err => log(`Failed to invoke close_cleaner_window: ${err}`));
+              invoke("close_cleaner_window").catch(console.error);
             }
           }, 16);
         }
       } else {
         // If other keys are pressed, reset the progress
         if (e.key !== "Escape" && e.key !== "Control") {
-          log(`Non-shortcut key '${e.key}' pressed, resetting progress`);
           resetProgress();
         }
       }
@@ -107,18 +72,13 @@ function Cleaner() {
       e.preventDefault();
       e.stopPropagation();
 
-      log(`KeyUp: key='${e.key}' code='${e.code}' ctrl='${e.ctrlKey}' meta='${e.metaKey}'`);
-
       keysPressed.current[e.key] = false;
       
       // If either Control or Escape is released, reset progress
       const isCtrlPressed = e.ctrlKey || keysPressed.current["Control"];
       const isEscPressed = keysPressed.current["Escape"];
 
-      log(`KeyUp Check - ctrlPressed=${isCtrlPressed}, escPressed=${isEscPressed}`);
-
       if (!isCtrlPressed || !isEscPressed) {
-        log(`Key released (ctrl=${isCtrlPressed}, esc=${isEscPressed}). Resetting progress.`);
         resetProgress();
       }
     };
@@ -127,7 +87,6 @@ function Cleaner() {
       // Intercept all mouse clicks to prevent OS interaction
       e.preventDefault();
       e.stopPropagation();
-      log(`MouseDown intercepted: button=${e.button}`);
     };
 
     // Global listeners for key and mouse events
@@ -139,9 +98,6 @@ function Cleaner() {
     window.addEventListener("contextmenu", handleMouseDown, true);
 
     return () => {
-      log("Cleaning up Cleaner screen event listeners");
-      window.removeEventListener("focus", handleFocus);
-      window.removeEventListener("blur", handleBlur);
       window.removeEventListener("keydown", handleKeyDown, true);
       window.removeEventListener("keyup", handleKeyUp, true);
       window.removeEventListener("mousedown", handleMouseDown, true);
@@ -232,40 +188,6 @@ function Cleaner() {
         <div className="cleaner-shortcut-badge">
           <span>Çıkmak için <b>Control + ESC</b> tuşlarını 3 saniye basılı tutun</span>
         </div>
-      </div>
-
-      {/* Debug Logs Overlay */}
-      <div style={{
-        position: "absolute",
-        bottom: "24px",
-        left: "24px",
-        right: "24px",
-        maxHeight: "180px",
-        overflowY: "auto",
-        background: "rgba(0, 0, 0, 0.85)",
-        border: "1px solid rgba(255, 255, 255, 0.15)",
-        borderRadius: "8px",
-        padding: "12px",
-        fontSize: "11px",
-        fontFamily: "monospace",
-        color: "#85e89d",
-        textAlign: "left",
-        zIndex: 100000,
-        pointerEvents: "none",
-        boxShadow: "0 10px 30px rgba(0,0,0,0.5)"
-      }}>
-        <div style={{ fontWeight: "bold", marginBottom: "6px", color: "#ffffff", borderBottom: "1px solid rgba(255, 255, 255, 0.1)", paddingBottom: "4px" }}>
-          💻 Klavye Temizleyici Debug Logları:
-        </div>
-        {debugLogs.length === 0 ? (
-          <div style={{ color: "#8b949e" }}>Henüz bir olay gerçekleşmedi. Tuşlara basın...</div>
-        ) : (
-          debugLogs.map((logMsg, i) => (
-            <div key={i} style={{ marginBottom: "2px", fontFamily: "monospace" }}>
-              {logMsg}
-            </div>
-          ))
-        )}
       </div>
     </div>
   );
