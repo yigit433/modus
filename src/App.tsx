@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -215,6 +216,52 @@ function Cleaner({ t }: CleanerProps) {
 }
 
 
+// --- CURSOR OVERLAY VIEW ---
+function CursorOverlay() {
+  const ringRef = useRef<HTMLDivElement>(null);
+  const [ripples, setRipples] = useState<Array<{ id: number; x: number; y: number }>>([]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+
+    listen<{ x: number; y: number; clicked: boolean }>("cursor-move", (event) => {
+      const { x, y, clicked } = event.payload;
+
+      // Direct DOM manipulation for performance (avoids React re-render per frame)
+      if (ringRef.current) {
+        ringRef.current.style.transform = `translate(${x}px, ${y}px)`;
+      }
+
+      if (clicked) {
+        const id = Date.now() + Math.random();
+        setRipples((prev) => [...prev, { id, x, y }]);
+        setTimeout(() => {
+          setRipples((prev) => prev.filter((r) => r.id !== id));
+        }, 600);
+      }
+    }).then((fn) => {
+      unlisten = fn;
+    });
+
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, []);
+
+  return (
+    <div className="cursor-overlay-container">
+      <div ref={ringRef} className="cursor-highlight-ring" />
+      {ripples.map((r) => (
+        <div
+          key={r.id}
+          className="cursor-click-ripple"
+          style={{ left: r.x, top: r.y }}
+        />
+      ))}
+    </div>
+  );
+}
+
 // --- MAIN CONTROL PANEL VIEW ---
 interface MainPanelProps {
   t: (key: keyof typeof TRANSLATIONS["en"]) => string;
@@ -227,6 +274,7 @@ function MainPanel({ t, lang, changeLanguage }: MainPanelProps) {
   const [caffeine, setCaffeine] = useState(false);
   const [desktopIcons, setDesktopIcons] = useState(true);
   const [mute, setMute] = useState(false);
+  const [cursorHighlight, setCursorHighlight] = useState(false);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState("");
 
@@ -291,16 +339,18 @@ function MainPanel({ t, lang, changeLanguage }: MainPanelProps) {
   useEffect(() => {
     async function fetchStates() {
       try {
-        const [dm, caf, dt, mt] = await Promise.all([
+        const [dm, caf, dt, mt, ch] = await Promise.all([
           invoke<boolean>("get_dark_mode"),
           invoke<boolean>("get_caffeine"),
           invoke<boolean>("get_desktop_icons"),
           invoke<boolean>("get_mute"),
+          invoke<boolean>("get_cursor_highlight"),
         ]);
         setDarkMode(dm);
         setCaffeine(caf);
         setDesktopIcons(dt);
         setMute(mt);
+        setCursorHighlight(ch);
 
       } catch (err) {
         console.error("Failed to load initial macOS states:", err);
@@ -363,6 +413,18 @@ function MainPanel({ t, lang, changeLanguage }: MainPanelProps) {
     } catch (err) {
       console.error(err);
       showToast(t("toastMuteFail"));
+    }
+  };
+
+  const handleCursorHighlightToggle = async () => {
+    try {
+      const target = !cursorHighlight;
+      await invoke("toggle_cursor_highlight", { active: target });
+      setCursorHighlight(target);
+      showToast(target ? t("toastCursorHighlightOn") : t("toastCursorHighlightOff"));
+    } catch (err) {
+      console.error(err);
+      showToast(t("toastCursorHighlightFail"));
     }
   };
 
@@ -624,7 +686,28 @@ function MainPanel({ t, lang, changeLanguage }: MainPanelProps) {
           </button>
         </div>
 
-
+        {/* Cursor Highlight */}
+        <div className="control-card">
+          <div className="control-info">
+            <div className={`control-icon icon-cursor-highlight ${cursorHighlight ? "active" : ""}`}>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" opacity="0.4" />
+                <circle cx="12" cy="12" r="5" fill="currentColor" />
+                <path d="M12 2v2" />
+                <path d="M12 20v2" />
+                <path d="M2 12h2" />
+                <path d="M20 12h2" />
+              </svg>
+            </div>
+            <div className="control-text">
+              <span className="control-title">{t("cursorHighlightTitle")}</span>
+              <span className="control-desc">{t("cursorHighlightDesc")}</span>
+            </div>
+          </div>
+          <button className={`toggle-switch ${cursorHighlight ? "active" : ""}`} onClick={handleCursorHighlightToggle} aria-label="Toggle Cursor Highlight">
+            <span className="toggle-handle"></span>
+          </button>
+        </div>
 
         {/* Prominent Keyboard Cleaner Feature Block */}
         <div className="cleaner-launcher-card" onClick={handleOpenCleaner}>
@@ -722,6 +805,10 @@ function App() {
 
   if (windowLabel === "cleaner") {
     return <Cleaner t={t} />;
+  }
+
+  if (windowLabel === "cursor_overlay") {
+    return <CursorOverlay />;
   }
 
 

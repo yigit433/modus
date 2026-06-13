@@ -1,6 +1,8 @@
 use std::process::Child;
-use std::sync::Mutex;
-use std::time::Instant;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::{Duration, Instant};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent, MouseButtonState};
 use tauri::{Manager, PhysicalPosition, PhysicalSize, Position};
 
@@ -8,6 +10,8 @@ use tauri::{Manager, PhysicalPosition, PhysicalSize, Position};
 pub struct AppState {
     pub caffeine_child: Mutex<Option<Child>>,
     pub last_show_time: Mutex<Option<Instant>>,
+    pub cursor_highlight_active: Mutex<bool>,
+    pub cursor_tap_stop: Mutex<Option<Arc<AtomicBool>>>,
 }
 
 impl Default for AppState {
@@ -15,6 +19,8 @@ impl Default for AppState {
         Self {
             caffeine_child: Mutex::new(None),
             last_show_time: Mutex::new(None),
+            cursor_highlight_active: Mutex::new(false),
+            cursor_tap_stop: Mutex::new(None),
         }
     }
 }
@@ -24,6 +30,9 @@ impl Drop for AppState {
         let mut guard = self.caffeine_child.lock().unwrap();
         if let Some(mut child) = guard.take() {
             let _ = child.kill();
+        }
+        if let Some(stop) = self.cursor_tap_stop.lock().unwrap().take() {
+            stop.store(true, Ordering::Relaxed);
         }
     }
 }
@@ -217,6 +226,191 @@ fn close_cleaner_window(app_handle: tauri::AppHandle) {
 }
 
 
+#[derive(Clone, serde::Serialize)]
+struct CursorMovePayload {
+    x: f64,
+    y: f64,
+    clicked: bool,
+}
+
+#[tauri::command]
+fn get_cursor_highlight(state: tauri::State<'_, AppState>) -> bool {
+    *state.cursor_highlight_active.lock().unwrap()
+}
+
+#[tauri::command]
+fn toggle_cursor_highlight(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    active: bool,
+) -> Result<(), String> {
+    let mut is_active = state.cursor_highlight_active.lock().unwrap();
+
+    if active && !*is_active {
+        // Create overlay window
+        let overlay = create_cursor_overlay(&app_handle)?;
+
+        // Configure macOS-specific overlay properties
+        #[cfg(target_os = "macos")]
+        configure_overlay_macos(&overlay);
+
+        let _ = overlay.show();
+
+        // Start mouse tracking thread
+        let stop_flag = Arc::new(AtomicBool::new(false));
+        let stop_clone = stop_flag.clone();
+        let handle_clone = app_handle.clone();
+
+        thread::spawn(move || {
+            use core_graphics::event::CGEvent;
+            use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+            use tauri::Emitter;
+
+            // CGEventSourceButtonState is not wrapped in core-graphics 0.24,
+            // so we call the CoreGraphics C function directly via FFI.
+            extern "C" {
+                fn CGEventSourceButtonState(
+                    state_id: u32,
+                    button: u32,
+                ) -> bool;
+            }
+
+            let mut prev_left = false;
+            let mut last_x: f64 = -1.0;
+            let mut last_y: f64 = -1.0;
+
+            loop {
+                if stop_clone.load(Ordering::Relaxed) {
+                    break;
+                }
+
+                let source_state = CGEventSourceStateID::CombinedSessionState;
+
+                if let Ok(source) = CGEventSource::new(source_state) {
+                    if let Ok(event) = CGEvent::new(source) {
+                        let pos = event.location();
+
+                        // CombinedSessionState = 1, CGMouseButton::Left = 0
+                        let left_pressed = unsafe {
+                            CGEventSourceButtonState(1, 0)
+                        };
+
+                        // Detect click transition (not pressed -> pressed)
+                        let just_clicked = left_pressed && !prev_left;
+                        prev_left = left_pressed;
+
+                        // Only emit if position changed or click happened
+                        if (pos.x - last_x).abs() > 0.5
+                            || (pos.y - last_y).abs() > 0.5
+                            || just_clicked
+                        {
+                            last_x = pos.x;
+                            last_y = pos.y;
+
+                            let _ = handle_clone.emit(
+                                "cursor-move",
+                                CursorMovePayload {
+                                    x: pos.x,
+                                    y: pos.y,
+                                    clicked: just_clicked,
+                                },
+                            );
+                        }
+                    }
+                }
+
+                thread::sleep(Duration::from_millis(8));
+            }
+        });
+
+        *state.cursor_tap_stop.lock().unwrap() = Some(stop_flag);
+        *is_active = true;
+    } else if !active && *is_active {
+        // Stop tracking thread
+        if let Some(stop) = state.cursor_tap_stop.lock().unwrap().take() {
+            stop.store(true, Ordering::Relaxed);
+        }
+
+        // Close overlay window
+        if let Some(win) = app_handle.get_webview_window("cursor_overlay") {
+            let _ = win.close();
+        }
+
+        *is_active = false;
+    }
+
+    Ok(())
+}
+
+fn create_cursor_overlay(app_handle: &tauri::AppHandle) -> Result<tauri::WebviewWindow, String> {
+    // If already exists, return it
+    if let Some(existing) = app_handle.get_webview_window("cursor_overlay") {
+        return Ok(existing);
+    }
+
+    // Get primary monitor dimensions for window sizing
+    let monitor = app_handle
+        .primary_monitor()
+        .map_err(|e| e.to_string())?
+        .ok_or("Primary monitor bulunamadı".to_string())?;
+    let size = monitor.size();
+    let scale = monitor.scale_factor();
+    let logical_w = size.width as f64 / scale;
+    let logical_h = size.height as f64 / scale;
+
+    let overlay = tauri::WebviewWindowBuilder::new(
+        app_handle,
+        "cursor_overlay",
+        tauri::WebviewUrl::App("index.html".into()),
+    )
+    .title("Cursor Overlay")
+    .inner_size(logical_w, logical_h)
+    .position(0.0, 0.0)
+    .decorations(false)
+    .transparent(true)
+    .always_on_top(true)
+    .visible(false)
+    .skip_taskbar(true)
+    .resizable(false)
+    .shadow(false)
+    .build()
+    .map_err(|e| format!("Overlay penceresi oluşturulamadı: {}", e))?;
+
+    Ok(overlay)
+}
+
+#[cfg(target_os = "macos")]
+fn configure_overlay_macos(window: &tauri::WebviewWindow) {
+    use objc::runtime::Object;
+    use objc::{msg_send, sel, sel_impl};
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+    // Access the native NSWindow to set click-through and window level
+    if let Ok(handle) = window.window_handle() {
+        if let RawWindowHandle::AppKit(appkit) = handle.as_raw() {
+            unsafe {
+                let ns_view = appkit.ns_view.as_ptr() as *mut Object;
+                let ns_window: *mut Object = msg_send![ns_view, window];
+
+                // Make window click-through: all mouse events pass to apps below
+                let _: () = msg_send![ns_window, setIgnoresMouseEvents: true];
+
+                // Set window level above everything (NSStatusWindowLevel = 25)
+                let _: () = msg_send![ns_window, setLevel: 25_i64];
+
+                // Remove window shadow
+                let _: () = msg_send![ns_window, setHasShadow: false];
+
+                // Join all spaces and be stationary (don't appear in Mission Control)
+                // NSWindowCollectionBehaviorCanJoinAllSpaces = 1 << 0
+                // NSWindowCollectionBehaviorStationary = 1 << 4
+                let behavior: u64 = (1 << 0) | (1 << 4);
+                let _: () = msg_send![ns_window, setCollectionBehavior: behavior];
+            }
+        }
+    }
+}
+
 #[tauri::command]
 fn quit_app(app_handle: tauri::AppHandle) {
     app_handle.exit(0);
@@ -245,6 +439,8 @@ pub fn run() {
             empty_trash,
             open_cleaner_window,
             close_cleaner_window,
+            get_cursor_highlight,
+            toggle_cursor_highlight,
             quit_app
         ])
         .setup(|app| {
