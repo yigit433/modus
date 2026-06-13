@@ -11,9 +11,10 @@ import "./App.css";
 interface CursorSettings {
   color: string;
   size: number;
-  shape: "circle" | "square" | "ring" | "diamond";
+  shape: "circle" | "square" | "ring" | "diamond" | "heart";
   borderStyle: "solid" | "dashed" | "dotted";
-  animation: "none" | "spin" | "pulse";
+  borderWidth: number;
+  animation: "none" | "spin" | "pulse" | "heartbeat";
   ripple: boolean;
   opacity: number;
   autoHide: boolean;
@@ -23,7 +24,8 @@ const DEFAULT_CURSOR_SETTINGS: CursorSettings = {
   color: "#3b82f6",
   size: 40,
   shape: "circle",
-  borderStyle: "dashed", // Kullanıcının istediği varsayılan çizgi çizgi
+  borderStyle: "dashed",
+  borderWidth: 2,
   animation: "none",
   ripple: true,
   opacity: 1.0,
@@ -324,14 +326,20 @@ function CursorOverlay() {
     };
 
     const isRing = settings.shape === "ring";
+    const isHeart = settings.shape === "heart";
     const bStyle = settings.borderStyle || "solid";
+    const bWidth = settings.borderWidth || 2;
 
-    if (isRing) {
-      border = `3px ${bStyle} ${hexToRgba(settings.color, 0.7)}`;
+    if (isHeart) {
+      background = "transparent";
+      border = "none";
+      boxShadow = "none";
+    } else if (isRing) {
+      border = `${bWidth}px ${bStyle} ${hexToRgba(settings.color, 0.7)}`;
       boxShadow = `0 0 10px 2px ${hexToRgba(settings.color, 0.4)}, inset 0 0 10px 2px ${hexToRgba(settings.color, 0.4)}`;
     } else {
       background = `radial-gradient(circle, ${hexToRgba(settings.color, 0.3)} 0%, ${hexToRgba(settings.color, 0.1)} 50%, transparent 70%)`;
-      border = `2px ${bStyle} ${hexToRgba(settings.color, 0.5)}`;
+      border = `${bWidth}px ${bStyle} ${hexToRgba(settings.color, 0.5)}`;
       boxShadow = `0 0 18px 4px ${hexToRgba(settings.color, 0.18)}`;
     }
 
@@ -340,6 +348,8 @@ function CursorOverlay() {
       animation = "cursor-spin 4s linear infinite";
     } else if (settings.animation === "pulse") {
       animation = "cursor-pulse 2s ease-in-out infinite";
+    } else if (settings.animation === "heartbeat") {
+      animation = "cursor-heartbeat 1.5s ease-in-out infinite";
     }
 
     return {
@@ -375,6 +385,7 @@ function CursorOverlay() {
     }
 
     const bStyle = settings.borderStyle || "solid";
+    const bWidth = settings.borderWidth || 2;
 
     return {
       left: x,
@@ -383,7 +394,21 @@ function CursorOverlay() {
       "--ripple-color": rStr,
       "--ripple-transform": transformBase,
       borderStyle: bStyle,
+      borderWidth: `${bWidth}px`,
     } as React.CSSProperties;
+  };
+
+  const getHeartSvgProps = () => {
+    let strokeDasharray = "none";
+    if (settings.borderStyle === "dashed") strokeDasharray = "5, 5";
+    if (settings.borderStyle === "dotted") strokeDasharray = "2, 3";
+    
+    return {
+      fill: `rgba(${parseInt(settings.color.slice(1,3),16)}, ${parseInt(settings.color.slice(3,5),16)}, ${parseInt(settings.color.slice(5,7),16)}, 0.3)`,
+      stroke: settings.color,
+      strokeWidth: (settings.borderWidth || 2) * (24 / settings.size), // scale stroke relative to viewbox
+      strokeDasharray,
+    };
   };
 
   return (
@@ -403,7 +428,17 @@ function CursorOverlay() {
           transition: settings.autoHide ? "opacity 0.2s ease-out" : "none",
         }}
       >
-        <div style={getRingStyle()} />
+        <div style={getRingStyle()}>
+          {settings.shape === "heart" && (
+            <svg width="100%" height="100%" viewBox="0 0 24 24" style={{ overflow: "visible" }}>
+              <path 
+                d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
+                {...getHeartSvgProps()}
+                style={{ filter: `drop-shadow(0 0 4px ${settings.color})` }}
+              />
+            </svg>
+          )}
+        </div>
       </div>
       {ripples.map((r) => (
         <div
@@ -925,6 +960,7 @@ function MainPanel({ t, lang, changeLanguage }: MainPanelProps) {
                   <button className={`shape-btn ${cursorSettings.shape === "ring" ? "active" : ""}`} onClick={() => updateCursorSetting("shape", "ring")}>Halka</button>
                   <button className={`shape-btn ${cursorSettings.shape === "square" ? "active" : ""}`} onClick={() => updateCursorSetting("shape", "square")}>Kare</button>
                   <button className={`shape-btn ${cursorSettings.shape === "diamond" ? "active" : ""}`} onClick={() => updateCursorSetting("shape", "diamond")}>Elmas</button>
+                  <button className={`shape-btn ${cursorSettings.shape === "heart" ? "active" : ""}`} onClick={() => updateCursorSetting("shape", "heart")}>Kalp</button>
                 </div>
               </div>
 
@@ -938,11 +974,23 @@ function MainPanel({ t, lang, changeLanguage }: MainPanelProps) {
               </div>
 
               <div className="setting-row">
+                <span className="setting-label">Kalınlık</span>
+                <input 
+                  type="range" 
+                  min="1" max="10" step="1"
+                  value={cursorSettings.borderWidth} 
+                  onChange={(e) => updateCursorSetting("borderWidth", parseInt(e.target.value))}
+                  className="size-slider"
+                />
+              </div>
+
+              <div className="setting-row">
                 <span className="setting-label">Animasyon</span>
                 <div className="shape-picker-group">
                   <button className={`shape-btn ${cursorSettings.animation === "none" ? "active" : ""}`} onClick={() => updateCursorSetting("animation", "none")}>Sabit</button>
                   <button className={`shape-btn ${cursorSettings.animation === "spin" ? "active" : ""}`} onClick={() => updateCursorSetting("animation", "spin")}>Dönme</button>
                   <button className={`shape-btn ${cursorSettings.animation === "pulse" ? "active" : ""}`} onClick={() => updateCursorSetting("animation", "pulse")}>Nefes</button>
+                  <button className={`shape-btn ${cursorSettings.animation === "heartbeat" ? "active" : ""}`} onClick={() => updateCursorSetting("animation", "heartbeat")}>Kalp Atışı</button>
                 </div>
               </div>
 
