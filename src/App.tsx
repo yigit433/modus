@@ -13,6 +13,8 @@ interface CursorSettings {
   size: number;
   shape: "circle" | "square" | "ring" | "diamond";
   ripple: boolean;
+  opacity: number;
+  autoHide: boolean;
 }
 
 const DEFAULT_CURSOR_SETTINGS: CursorSettings = {
@@ -20,6 +22,8 @@ const DEFAULT_CURSOR_SETTINGS: CursorSettings = {
   size: 40,
   shape: "circle",
   ripple: true,
+  opacity: 1.0,
+  autoHide: false,
 };
 
 // Helper to determine the default browser language
@@ -240,8 +244,13 @@ function CursorOverlay() {
   });
 
   const settingsRef = useRef(settings);
+  const hideTimeoutRef = useRef<number | null>(null);
+
   useEffect(() => {
     settingsRef.current = settings;
+    if (!settings.autoHide && ringRef.current) {
+      ringRef.current.style.opacity = settings.opacity.toString();
+    }
   }, [settings]);
 
   useEffect(() => {
@@ -256,6 +265,14 @@ function CursorOverlay() {
       if (ringRef.current) {
         ringRef.current.style.setProperty("--cursor-x", `${x}px`);
         ringRef.current.style.setProperty("--cursor-y", `${y}px`);
+
+        if (currentSettings.autoHide) {
+          ringRef.current.style.opacity = currentSettings.opacity.toString();
+          if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current);
+          hideTimeoutRef.current = setTimeout(() => {
+            if (ringRef.current) ringRef.current.style.opacity = "0";
+          }, 300); // 300ms inactivity hides the cursor
+        }
       }
 
       if (clicked && currentSettings.ripple) {
@@ -323,6 +340,8 @@ function CursorOverlay() {
       border,
       boxShadow,
       transform: `translate(var(--cursor-x, 0px), var(--cursor-y, 0px))${transformBase}`,
+      opacity: settings.autoHide ? 0 : settings.opacity,
+      transition: settings.autoHide ? "opacity 0.2s ease-out" : "none",
     } as React.CSSProperties;
   };
 
@@ -879,8 +898,26 @@ function MainPanel({ t, lang, changeLanguage }: MainPanelProps) {
               </div>
 
               <div className="setting-row">
+                <span className="setting-label">Opaklık</span>
+                <input 
+                  type="range" 
+                  min="0.1" max="1.0" step="0.1"
+                  value={cursorSettings.opacity} 
+                  onChange={(e) => updateCursorSetting("opacity", parseFloat(e.target.value))}
+                  className="size-slider"
+                />
+              </div>
+
+              <div className="setting-row">
                 <span className="setting-label">Tıklama Efekti</span>
                 <button className={`toggle-switch small ${cursorSettings.ripple ? "active" : ""}`} onClick={() => updateCursorSetting("ripple", !cursorSettings.ripple)}>
+                  <span className="toggle-handle"></span>
+                </button>
+              </div>
+
+              <div className="setting-row">
+                <span className="setting-label">Otomatik Gizle</span>
+                <button className={`toggle-switch small ${cursorSettings.autoHide ? "active" : ""}`} onClick={() => updateCursorSetting("autoHide", !cursorSettings.autoHide)}>
                   <span className="toggle-handle"></span>
                 </button>
               </div>
