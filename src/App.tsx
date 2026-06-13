@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { check } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import "./App.css";
 
 // --- KEYBOARD CLEANER VIEW ---
@@ -208,6 +210,64 @@ function MainPanel() {
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState("");
 
+  const [showAbout, setShowAbout] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<"idle" | "checking" | "available" | "downloading" | "uptodate" | "error">("idle");
+  const [newVersion, setNewVersion] = useState("");
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const handleCheckUpdates = async () => {
+    setUpdateStatus("checking");
+    setErrorMessage("");
+    try {
+      const update = await check();
+      if (update) {
+        setNewVersion(update.version);
+        setUpdateStatus("available");
+      } else {
+        setUpdateStatus("uptodate");
+      }
+    } catch (err: any) {
+      console.error(err);
+      setErrorMessage(err.message || String(err));
+      setUpdateStatus("error");
+    }
+  };
+
+  const handleInstallUpdate = async () => {
+    setUpdateStatus("downloading");
+    setDownloadProgress(0);
+    try {
+      const update = await check();
+      if (update) {
+        let downloaded = 0;
+        let total = 0;
+        await update.downloadAndInstall((event) => {
+          switch (event.event) {
+            case "Started":
+              total = event.data.contentLength || 0;
+              break;
+            case "Progress":
+              downloaded += event.data.chunkLength;
+              if (total > 0) {
+                setDownloadProgress(Math.min((downloaded / total) * 100, 100));
+              }
+              break;
+            case "Finished":
+              break;
+          }
+        });
+        await relaunch();
+      } else {
+        setUpdateStatus("uptodate");
+      }
+    } catch (err: any) {
+      console.error(err);
+      setErrorMessage(err.message || String(err));
+      setUpdateStatus("error");
+    }
+  };
+
   useEffect(() => {
     async function fetchStates() {
       try {
@@ -330,10 +390,95 @@ function MainPanel() {
       {/* Toast Notification */}
       {toast && <div className="toast-notification">{toast}</div>}
 
+      {/* About Modal */}
+      {showAbout && (
+        <div className="about-overlay">
+          <div className="about-modal">
+            <div className="about-header">
+              <div className="about-logo-wrapper">
+                <div className="about-logo">M</div>
+              </div>
+              <h2 className="about-title">Modus</h2>
+              <span className="about-subtitle">macOS Hızlı Erişim</span>
+            </div>
+
+            <div className="about-divider"></div>
+
+            <div className="about-body">
+              <div className="info-row">
+                <span className="info-label">Geliştirici</span>
+                <span className="info-val">Yiğit Efe Avcı</span>
+              </div>
+              <div className="info-row">
+                <span className="info-label">GitHub</span>
+                <a href="https://github.com/yigit433/modus" target="_blank" rel="noopener noreferrer" className="info-val link">yigit433/modus</a>
+              </div>
+              <div className="info-row">
+                <span className="info-label">Sürüm</span>
+                <span className="info-val">v0.1.0</span>
+              </div>
+              
+              <div className="about-updater-section">
+                {updateStatus === "idle" && (
+                  <button className="updater-btn" onClick={handleCheckUpdates}>Güncellemeleri Denetle</button>
+                )}
+                {updateStatus === "checking" && (
+                  <div className="updater-status">
+                    <div className="spinner-small"></div>
+                    <span>Güncellemeler denetleniyor...</span>
+                  </div>
+                )}
+                {updateStatus === "uptodate" && (
+                  <div className="updater-status success">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "4px" }}>
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                    <span>Uygulamanız en güncel sürümde.</span>
+                  </div>
+                )}
+                {updateStatus === "available" && (
+                  <div className="updater-available-wrapper" style={{ width: "100%" }}>
+                    <div className="updater-new-ver" style={{ fontSize: "11px", marginBottom: "6px", textAlign: "center" }}>Yeni sürüm mevcut: <b>v{newVersion}</b></div>
+                    <button className="updater-btn install" onClick={handleInstallUpdate}>İndir ve Yükle</button>
+                  </div>
+                )}
+                {updateStatus === "downloading" && (
+                  <div className="updater-download-wrapper">
+                    <span>Güncelleme indiriliyor... (%{Math.round(downloadProgress)})</span>
+                    <div className="updater-progress-bar">
+                      <div className="updater-progress-fill" style={{ width: `${downloadProgress}%` }}></div>
+                    </div>
+                  </div>
+                )}
+                {updateStatus === "error" && (
+                  <div className="updater-status error">
+                    <span>Güncelleme denetlenemedi.</span>
+                    <button className="updater-btn-retry" onClick={handleCheckUpdates}>Tekrar Dene</button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <button className="about-close-btn" onClick={() => { setShowAbout(false); setUpdateStatus("idle"); }}>Kapat</button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="app-header">
-        <span className="app-title">Modus</span>
-        <span className="app-subtitle">macOS Hızlı Erişim</span>
+        <div className="header-top">
+          <div className="header-titles">
+            <span className="app-title">Modus</span>
+            <span className="app-subtitle">macOS Hızlı Erişim</span>
+          </div>
+          <button className="info-btn" onClick={() => setShowAbout(true)} aria-label="About App">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="16" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12.01" y2="8" />
+            </svg>
+          </button>
+        </div>
       </header>
 
       {/* Control Elements List */}
