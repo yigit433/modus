@@ -12,9 +12,10 @@ function Cleaner() {
   const isHoldingRef = useRef(false);
 
   useEffect(() => {
-    // Try to force focus on window load
+    // Try to force focus and native fullscreen on window load
     const win = getCurrentWindow();
     win.setFocus().catch(() => {});
+    win.setFullscreen(true).catch(() => {});
 
     const resetProgress = () => {
       isHoldingRef.current = false;
