@@ -4,23 +4,27 @@ import { listen, emit } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { getVersion } from "@tauri-apps/api/app";
 import { TRANSLATIONS } from "./translations";
 import type { Language } from "./translations";
 import "./App.css";
 
 interface CursorSettings {
+  effectMode: "highlight" | "spotlight" | "magnifier";
   color: string;
   size: number;
-  shape: "circle" | "square" | "ring" | "diamond" | "heart";
+  shape: "circle" | "square" | "ring" | "diamond" | "heart" | "squircle";
   borderStyle: "solid" | "dashed" | "dotted";
   borderWidth: number;
   animation: "none" | "spin" | "pulse" | "heartbeat";
   ripple: boolean;
   opacity: number;
   autoHide: boolean;
+  autoHideDuration: number;
 }
 
 const DEFAULT_CURSOR_SETTINGS: CursorSettings = {
+  effectMode: "highlight",
   color: "#3b82f6",
   size: 40,
   shape: "circle",
@@ -30,6 +34,7 @@ const DEFAULT_CURSOR_SETTINGS: CursorSettings = {
   ripple: true,
   opacity: 1.0,
   autoHide: false,
+  autoHideDuration: 300,
 };
 
 // Helper to determine the default browser language
@@ -242,8 +247,11 @@ function Cleaner({ t }: CleanerProps) {
 
 // --- CURSOR OVERLAY VIEW ---
 function CursorOverlay() {
+  const containerRef = useRef<HTMLDivElement>(null);
   const ringRef = useRef<HTMLDivElement>(null);
   const [ripples, setRipples] = useState<Array<{ id: number; x: number; y: number }>>([]);
+  const [magnifierImage, setMagnifierImage] = useState<string | null>(null);
+  const magnifierReqRef = useRef(false);
   const [settings, setSettings] = useState<CursorSettings>(() => {
     const saved = localStorage.getItem("cursorSettings");
     return saved ? JSON.parse(saved) : DEFAULT_CURSOR_SETTINGS;
@@ -254,10 +262,46 @@ function CursorOverlay() {
 
   useEffect(() => {
     settingsRef.current = settings;
-    if (!settings.autoHide && ringRef.current) {
-      ringRef.current.style.opacity = settings.opacity.toString();
+    if (!settings.autoHide && containerRef.current) {
+      containerRef.current.style.opacity = "1";
     }
   }, [settings]);
+
+  useEffect(() => {
+    let active = true;
+    const tick = async () => {
+      if (!active) return;
+      
+      const currentSettings = settingsRef.current;
+      if (currentSettings.effectMode === "magnifier" && containerRef.current) {
+        const xStr = containerRef.current.style.getPropertyValue("--cursor-x");
+        const yStr = containerRef.current.style.getPropertyValue("--cursor-y");
+        const x = parseFloat(xStr) || 0;
+        const y = parseFloat(yStr) || 0;
+
+        if (x > 0 && y > 0 && !magnifierReqRef.current) {
+          magnifierReqRef.current = true;
+          try {
+            const captureSize = currentSettings.size * 2.0;
+            const base64 = await invoke<string>("get_magnifier_image", { x, y, size: captureSize });
+            if (active) setMagnifierImage(base64);
+          } catch (e) {
+             // ignore errors quietly
+          } finally {
+            magnifierReqRef.current = false;
+          }
+        }
+      }
+      
+      if (active) {
+        requestAnimationFrame(tick);
+      }
+    };
+
+    requestAnimationFrame(tick);
+    
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     let unlistenMove: (() => void) | null = null;
@@ -268,16 +312,16 @@ function CursorOverlay() {
       const currentSettings = settingsRef.current;
 
       // Direct DOM manipulation for performance (avoids React re-render per frame)
-      if (ringRef.current) {
-        ringRef.current.style.setProperty("--cursor-x", `${x}px`);
-        ringRef.current.style.setProperty("--cursor-y", `${y}px`);
+      if (containerRef.current) {
+        containerRef.current.style.setProperty("--cursor-x", `${x}px`);
+        containerRef.current.style.setProperty("--cursor-y", `${y}px`);
 
         if (currentSettings.autoHide) {
-          ringRef.current.style.opacity = currentSettings.opacity.toString();
+          containerRef.current.style.opacity = "1";
           if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current);
           hideTimeoutRef.current = setTimeout(() => {
-            if (ringRef.current) ringRef.current.style.opacity = "0";
-          }, 300); // 300ms inactivity hides the cursor
+            if (containerRef.current) containerRef.current.style.opacity = "0";
+          }, currentSettings.autoHideDuration || 300);
         }
       }
 
@@ -308,6 +352,7 @@ function CursorOverlay() {
     let borderRadius = "50%";
     let transformBase = "";
     if (settings.shape === "square") borderRadius = "8px";
+    if (settings.shape === "squircle") borderRadius = "35%";
     if (settings.shape === "diamond") {
       borderRadius = "8px";
       transformBase = " rotate(45deg)";
@@ -371,6 +416,7 @@ function CursorOverlay() {
     let borderRadius = "50%";
     let transformBase = "";
     if (settings.shape === "square") borderRadius = "8px";
+    if (settings.shape === "squircle") borderRadius = "35%";
     if (settings.shape === "diamond") {
       borderRadius = "8px";
       transformBase = " rotate(45deg)";
@@ -412,34 +458,90 @@ function CursorOverlay() {
   };
 
   return (
-    <div className="cursor-overlay-container">
-      <div 
-        ref={ringRef}
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          width: 0,
-          height: 0,
-          pointerEvents: "none",
-          zIndex: 999999,
-          transform: `translate(var(--cursor-x, 0px), var(--cursor-y, 0px))`,
-          opacity: settings.autoHide ? 0 : settings.opacity,
-          transition: settings.autoHide ? "opacity 0.2s ease-out" : "none",
-        }}
-      >
-        <div style={getRingStyle()}>
-          {settings.shape === "heart" && (
-            <svg width="100%" height="100%" viewBox="0 0 24 24" style={{ overflow: "visible" }}>
-              <path 
-                d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
-                {...getHeartSvgProps()}
-                style={{ filter: `drop-shadow(0 0 4px ${settings.color})` }}
-              />
-            </svg>
+    <div 
+      className="cursor-overlay-container" 
+      ref={containerRef}
+      style={{
+        opacity: settings.autoHide ? 0 : 1,
+        transition: settings.autoHide ? "opacity 0.2s ease-out" : "none",
+      }}
+    >
+      {settings.effectMode === "spotlight" && (
+        <div 
+          style={{
+            position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh",
+            backgroundColor: `rgba(0, 0, 0, ${settings.opacity})`,
+            pointerEvents: "none", zIndex: 999998,
+            WebkitMaskImage: `radial-gradient(circle at var(--cursor-x, 0px) var(--cursor-y, 0px), transparent ${settings.size * 0.4}px, black ${settings.size * 1.2}px)`,
+            maskImage: `radial-gradient(circle at var(--cursor-x, 0px) var(--cursor-y, 0px), transparent ${settings.size * 0.4}px, black ${settings.size * 1.2}px)`,
+          }}
+        />
+      )}
+
+      {settings.effectMode === "magnifier" && (
+        <div 
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: settings.size * 1.5,
+            height: settings.size * 1.5,
+            pointerEvents: "none",
+            zIndex: 999999,
+            transform: `translate(calc(var(--cursor-x, 0px) - 50%), calc(var(--cursor-y, 0px) - 50%))`,
+            borderRadius: "50%",
+            border: `3px solid ${settings.color}`,
+            boxShadow: "0 0 15px rgba(0,0,0,0.5)",
+            overflow: "hidden",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: "#222"
+          }}
+        >
+          {magnifierImage && (
+            <img 
+              src={`data:image/jpeg;base64,${magnifierImage}`} 
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                transform: "scale(1.5)"
+              }} 
+            />
           )}
         </div>
-      </div>
+      )}
+
+      {settings.effectMode === "highlight" && (
+        <div 
+          ref={ringRef}
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: 0,
+            height: 0,
+            pointerEvents: "none",
+            zIndex: 999999,
+            transform: `translate(var(--cursor-x, 0px), var(--cursor-y, 0px))`,
+            opacity: settings.opacity,
+          }}
+        >
+          <div style={getRingStyle()}>
+            {settings.shape === "heart" && (
+              <svg width="100%" height="100%" viewBox="0 0 24 24" style={{ overflow: "visible" }}>
+                <path 
+                  d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
+                  {...getHeartSvgProps()}
+                  style={{ filter: `drop-shadow(0 0 4px ${settings.color})` }}
+                />
+              </svg>
+            )}
+          </div>
+        </div>
+      )}
+
       {ripples.map((r) => (
         <div
           key={r.id}
@@ -472,6 +574,11 @@ function MainPanel({ t, lang, changeLanguage }: MainPanelProps) {
   const [newVersion, setNewVersion] = useState("");
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState("");
+  const [appVersion, setAppVersion] = useState("...");
+
+  useEffect(() => {
+    getVersion().then(v => setAppVersion(v)).catch(() => setAppVersion("0.1.0"));
+  }, []);
 
   const [showCursorSettings, setShowCursorSettings] = useState(false);
   const [cursorSettings, setCursorSettings] = useState<CursorSettings>(() => {
@@ -700,7 +807,7 @@ function MainPanel({ t, lang, changeLanguage }: MainPanelProps) {
               </div>
               <div className="info-row">
                 <span className="info-label">{t("version")}</span>
-                <span className="info-val">v0.1.0</span>
+                <span className="info-val">v{appVersion}</span>
               </div>
               <div className="info-row">
                 <span className="info-label">{t("selectLanguage")}</span>
@@ -928,95 +1035,140 @@ function MainPanel({ t, lang, changeLanguage }: MainPanelProps) {
           
           {showCursorSettings && (
             <div className="cursor-settings-panel">
-              <div className="setting-row">
-                <span className="setting-label">Renk</span>
-                <div className="color-picker-group">
-                  {["#3b82f6", "#ef4444", "#22c55e", "#eab308", "#a855f7"].map((color) => (
-                    <button 
-                      key={color} 
-                      className={`color-swatch ${cursorSettings.color === color ? "active" : ""}`}
-                      style={{ backgroundColor: color }}
-                      onClick={() => updateCursorSetting("color", color)}
-                    />
-                  ))}
-                </div>
-              </div>
               
-              <div className="setting-row">
-                <span className="setting-label">Boyut</span>
-                <input 
-                  type="range" 
-                  min="20" max="150" 
-                  value={cursorSettings.size} 
-                  onChange={(e) => updateCursorSetting("size", parseInt(e.target.value))}
-                  className="size-slider"
-                />
-              </div>
+              <div className="setting-group">
+                <div className="setting-group-title">Görünüm</div>
+                
+                <div className="setting-row">
+                  <span className="setting-label">Mod</span>
+                  <div className="shape-picker-group">
+                    <button className={`shape-btn ${cursorSettings.effectMode === "highlight" ? "active" : ""}`} onClick={() => updateCursorSetting("effectMode", "highlight")}>Vurgula</button>
+                    <button className={`shape-btn ${cursorSettings.effectMode === "spotlight" ? "active" : ""}`} onClick={() => updateCursorSetting("effectMode", "spotlight")}>Sahne</button>
+                    <button className={`shape-btn ${cursorSettings.effectMode === "magnifier" ? "active" : ""}`} onClick={() => updateCursorSetting("effectMode", "magnifier")}>Büyüteç</button>
+                  </div>
+                </div>
 
-              <div className="setting-row">
-                <span className="setting-label">Şekil</span>
-                <div className="shape-picker-group">
-                  <button className={`shape-btn ${cursorSettings.shape === "circle" ? "active" : ""}`} onClick={() => updateCursorSetting("shape", "circle")}>Daire</button>
-                  <button className={`shape-btn ${cursorSettings.shape === "ring" ? "active" : ""}`} onClick={() => updateCursorSetting("shape", "ring")}>Halka</button>
-                  <button className={`shape-btn ${cursorSettings.shape === "square" ? "active" : ""}`} onClick={() => updateCursorSetting("shape", "square")}>Kare</button>
-                  <button className={`shape-btn ${cursorSettings.shape === "diamond" ? "active" : ""}`} onClick={() => updateCursorSetting("shape", "diamond")}>Elmas</button>
-                  <button className={`shape-btn ${cursorSettings.shape === "heart" ? "active" : ""}`} onClick={() => updateCursorSetting("shape", "heart")}>Kalp</button>
+                {cursorSettings.effectMode === "highlight" && (
+                  <div className="setting-row column-layout">
+                    <span className="setting-label">Şekil</span>
+                    <div className="shape-picker-group full-width">
+                      <button className={`shape-btn ${cursorSettings.shape === "circle" ? "active" : ""}`} onClick={() => updateCursorSetting("shape", "circle")}>Daire</button>
+                      <button className={`shape-btn ${cursorSettings.shape === "ring" ? "active" : ""}`} onClick={() => updateCursorSetting("shape", "ring")}>Halka</button>
+                      <button className={`shape-btn ${cursorSettings.shape === "square" ? "active" : ""}`} onClick={() => updateCursorSetting("shape", "square")}>Kare</button>
+                      <button className={`shape-btn ${cursorSettings.shape === "squircle" ? "active" : ""}`} onClick={() => updateCursorSetting("shape", "squircle")}>Squircle</button>
+                      <button className={`shape-btn ${cursorSettings.shape === "diamond" ? "active" : ""}`} onClick={() => updateCursorSetting("shape", "diamond")}>Elmas</button>
+                      <button className={`shape-btn ${cursorSettings.shape === "heart" ? "active" : ""}`} onClick={() => updateCursorSetting("shape", "heart")}>Kalp</button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="setting-row">
+                  <span className="setting-label">Renk</span>
+                  <div className="color-picker-group">
+                    {["#3b82f6", "#ef4444", "#22c55e", "#eab308", "#a855f7"].map((color) => (
+                      <button 
+                        key={color} 
+                        className={`color-swatch ${cursorSettings.color === color ? "active" : ""}`}
+                        style={{ backgroundColor: color }}
+                        onClick={() => updateCursorSetting("color", color)}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div className="setting-row column-layout">
+                  <span className="setting-label">Animasyon</span>
+                  <div className="shape-picker-group full-width">
+                    <button className={`shape-btn ${cursorSettings.animation === "none" ? "active" : ""}`} onClick={() => updateCursorSetting("animation", "none")}>Sabit</button>
+                    <button className={`shape-btn ${cursorSettings.animation === "spin" ? "active" : ""}`} onClick={() => updateCursorSetting("animation", "spin")}>Dönme</button>
+                    <button className={`shape-btn ${cursorSettings.animation === "pulse" ? "active" : ""}`} onClick={() => updateCursorSetting("animation", "pulse")}>Nefes</button>
+                    <button className={`shape-btn ${cursorSettings.animation === "heartbeat" ? "active" : ""}`} onClick={() => updateCursorSetting("animation", "heartbeat")}>Kalp Atışı</button>
+                  </div>
                 </div>
               </div>
 
-              <div className="setting-row">
-                <span className="setting-label">Stil</span>
-                <div className="shape-picker-group">
-                  <button className={`shape-btn ${cursorSettings.borderStyle === "solid" ? "active" : ""}`} onClick={() => updateCursorSetting("borderStyle", "solid")}>Düz</button>
-                  <button className={`shape-btn ${cursorSettings.borderStyle === "dashed" ? "active" : ""}`} onClick={() => updateCursorSetting("borderStyle", "dashed")}>Çizgili</button>
-                  <button className={`shape-btn ${cursorSettings.borderStyle === "dotted" ? "active" : ""}`} onClick={() => updateCursorSetting("borderStyle", "dotted")}>Noktalı</button>
+              <div className="setting-group-divider" />
+
+              <div className="setting-group">
+                <div className="setting-group-title">Ölçüler</div>
+
+                <div className="setting-row">
+                  <span className="setting-label">Boyut</span>
+                  <input 
+                    type="range" 
+                    min="20" max="150" 
+                    value={cursorSettings.size} 
+                    onChange={(e) => updateCursorSetting("size", parseInt(e.target.value))}
+                    className="size-slider"
+                  />
+                </div>
+
+                <div className="setting-row">
+                  <span className="setting-label">Stil</span>
+                  <div className="shape-picker-group">
+                    <button className={`shape-btn ${cursorSettings.borderStyle === "solid" ? "active" : ""}`} onClick={() => updateCursorSetting("borderStyle", "solid")}>Düz</button>
+                    <button className={`shape-btn ${cursorSettings.borderStyle === "dashed" ? "active" : ""}`} onClick={() => updateCursorSetting("borderStyle", "dashed")}>Çizgili</button>
+                    <button className={`shape-btn ${cursorSettings.borderStyle === "dotted" ? "active" : ""}`} onClick={() => updateCursorSetting("borderStyle", "dotted")}>Noktalı</button>
+                  </div>
+                </div>
+
+                <div className="setting-row">
+                  <span className="setting-label">Kalınlık</span>
+                  <input 
+                    type="range" 
+                    min="1" max="10" step="1"
+                    value={cursorSettings.borderWidth} 
+                    onChange={(e) => updateCursorSetting("borderWidth", parseInt(e.target.value))}
+                    className="size-slider"
+                  />
+                </div>
+
+                <div className="setting-row">
+                  <span className="setting-label">Opaklık</span>
+                  <input 
+                    type="range" 
+                    min="0.1" max="1.0" step="0.1"
+                    value={cursorSettings.opacity} 
+                    onChange={(e) => updateCursorSetting("opacity", parseFloat(e.target.value))}
+                    className="size-slider"
+                  />
                 </div>
               </div>
 
-              <div className="setting-row">
-                <span className="setting-label">Kalınlık</span>
-                <input 
-                  type="range" 
-                  min="1" max="10" step="1"
-                  value={cursorSettings.borderWidth} 
-                  onChange={(e) => updateCursorSetting("borderWidth", parseInt(e.target.value))}
-                  className="size-slider"
-                />
-              </div>
+              <div className="setting-group-divider" />
 
-              <div className="setting-row">
-                <span className="setting-label">Animasyon</span>
-                <div className="shape-picker-group">
-                  <button className={`shape-btn ${cursorSettings.animation === "none" ? "active" : ""}`} onClick={() => updateCursorSetting("animation", "none")}>Sabit</button>
-                  <button className={`shape-btn ${cursorSettings.animation === "spin" ? "active" : ""}`} onClick={() => updateCursorSetting("animation", "spin")}>Dönme</button>
-                  <button className={`shape-btn ${cursorSettings.animation === "pulse" ? "active" : ""}`} onClick={() => updateCursorSetting("animation", "pulse")}>Nefes</button>
-                  <button className={`shape-btn ${cursorSettings.animation === "heartbeat" ? "active" : ""}`} onClick={() => updateCursorSetting("animation", "heartbeat")}>Kalp Atışı</button>
+              <div className="setting-group">
+                <div className="setting-group-title">Davranış</div>
+
+                <div className="setting-row">
+                  <span className="setting-label">Tıklama Efekti</span>
+                  <button className={`toggle-switch small ${cursorSettings.ripple ? "active" : ""}`} onClick={() => updateCursorSetting("ripple", !cursorSettings.ripple)}>
+                    <span className="toggle-handle"></span>
+                  </button>
                 </div>
-              </div>
 
-              <div className="setting-row">
-                <span className="setting-label">Opaklık</span>
-                <input 
-                  type="range" 
-                  min="0.1" max="1.0" step="0.1"
-                  value={cursorSettings.opacity} 
-                  onChange={(e) => updateCursorSetting("opacity", parseFloat(e.target.value))}
-                  className="size-slider"
-                />
-              </div>
+                <div className="setting-row">
+                  <span className="setting-label">Otomatik Gizle</span>
+                  <button className={`toggle-switch small ${cursorSettings.autoHide ? "active" : ""}`} onClick={() => updateCursorSetting("autoHide", !cursorSettings.autoHide)}>
+                    <span className="toggle-handle"></span>
+                  </button>
+                </div>
 
-              <div className="setting-row">
-                <span className="setting-label">Tıklama Efekti</span>
-                <button className={`toggle-switch small ${cursorSettings.ripple ? "active" : ""}`} onClick={() => updateCursorSetting("ripple", !cursorSettings.ripple)}>
-                  <span className="toggle-handle"></span>
-                </button>
-              </div>
-
-              <div className="setting-row">
-                <span className="setting-label">Otomatik Gizle</span>
-                <button className={`toggle-switch small ${cursorSettings.autoHide ? "active" : ""}`} onClick={() => updateCursorSetting("autoHide", !cursorSettings.autoHide)}>
-                  <span className="toggle-handle"></span>
-                </button>
+                {cursorSettings.autoHide && (
+                  <div className="setting-row">
+                    <span className="setting-label">Gizlenme Süresi</span>
+                    <select 
+                      value={cursorSettings.autoHideDuration || 300} 
+                      onChange={(e) => updateCursorSetting("autoHideDuration", parseInt(e.target.value))}
+                      className="style-select small-select"
+                    >
+                      <option value={300}>0.3 Saniye</option>
+                      <option value={1000}>1 Saniye</option>
+                      <option value={3000}>3 Saniye</option>
+                      <option value={5000}>5 Saniye</option>
+                    </select>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1082,7 +1234,7 @@ function MainPanel({ t, lang, changeLanguage }: MainPanelProps) {
 
       {/* Footer */}
       <footer className="app-footer">
-        <span>v0.1.0 • {t("openSource")}</span>
+        <span>v{appVersion} • {t("openSource")}</span>
         <button className="quit-btn" onClick={() => invoke("quit_app")} title={t("quitApp")}>
           {t("quitApp")}
         </button>

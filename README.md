@@ -93,10 +93,6 @@ Release processes are automated using GitHub Actions. To trigger a new build and
 git add .
 git commit -m "feat: implement multi-language and custom logo"
 git push origin main
-
-# Tag and push the version (triggers automated macOS universal build workflow)
-git tag v0.1.0
-git push origin v0.1.0
 ```
 
 ---

@@ -1066,6 +1066,29 @@ html, body {
   to { opacity: 1; transform: translateY(0); }
 }
 
+.setting-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.setting-group-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 4px;
+  margin-bottom: 2px;
+}
+
+.setting-group-divider {
+  height: 1px;
+  background: var(--border-panel);
+  margin: 6px 0;
+  opacity: 0.5;
+}
+
 .setting-row {
   display: flex;
   justify-content: space-between;
@@ -1073,6 +1096,17 @@ html, body {
   font-size: 12px;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.setting-row.column-layout {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.shape-picker-group.full-width {
+  width: 100%;
+  justify-content: space-between;
 }
 
 .setting-label {

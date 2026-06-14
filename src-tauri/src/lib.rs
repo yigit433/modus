@@ -238,6 +238,34 @@ fn get_cursor_highlight(state: tauri::State<'_, AppState>) -> bool {
     *state.cursor_highlight_active.lock().unwrap()
 }
 
+
+
+lazy_static::lazy_static! {
+    static ref MAGNIFIER_ACTIVE: AtomicBool = AtomicBool::new(false);
+    static ref MAGNIFIER_X: Mutex<f64> = Mutex::new(0.0);
+    static ref MAGNIFIER_Y: Mutex<f64> = Mutex::new(0.0);
+    static ref MAGNIFIER_SIZE: Mutex<f64> = Mutex::new(200.0);
+    static ref LATEST_BASE64: Mutex<Option<String>> = Mutex::new(None);
+    static ref LAST_REQUEST: Mutex<std::time::Instant> = Mutex::new(std::time::Instant::now());
+}
+
+#[tauri::command]
+fn get_magnifier_image(x: f64, y: f64, size: f64) -> Result<String, String> {
+    if let Ok(mut mx) = MAGNIFIER_X.lock() { *mx = x; }
+    if let Ok(mut my) = MAGNIFIER_Y.lock() { *my = y; }
+    if let Ok(mut msize) = MAGNIFIER_SIZE.lock() { *msize = size; }
+    if let Ok(mut last) = LAST_REQUEST.lock() { *last = std::time::Instant::now(); }
+    
+    MAGNIFIER_ACTIVE.store(true, Ordering::SeqCst);
+
+    if let Ok(latest) = LATEST_BASE64.lock() {
+        if let Some(b64) = latest.as_ref() {
+            return Ok(b64.clone());
+        }
+    }
+    Err("No frame yet".into())
+}
+
 #[tauri::command]
 fn toggle_cursor_highlight(
     app_handle: tauri::AppHandle,
@@ -402,6 +430,10 @@ fn configure_overlay_macos(window: &tauri::WebviewWindow) {
                 // Remove window shadow
                 let _: () = msg_send![ns_window, setHasShadow: false];
 
+                // Exclude window from screenshots to prevent magnifier feedback loop
+                // NSWindowSharingNone = 0
+                let _: () = msg_send![ns_window, setSharingType: 0_i64];
+
                 // Join all spaces and be stationary (don't appear in Mission Control)
                 // NSWindowCollectionBehaviorCanJoinAllSpaces = 1 << 0
                 // NSWindowCollectionBehaviorStationary = 1 << 4
@@ -442,9 +474,138 @@ pub fn run() {
             close_cleaner_window,
             get_cursor_highlight,
             toggle_cursor_highlight,
+            get_magnifier_image,
             quit_app
         ])
         .setup(|app| {
+            // BACKGROUND MAGNIFIER CAPTURE THREAD
+            std::thread::spawn(|| {
+                use std::io::Cursor;
+                use base64::{Engine as _, engine::general_purpose::STANDARD};
+                let mut monitors = xcap::Monitor::all().unwrap_or_default();
+                
+                loop {
+                    if !MAGNIFIER_ACTIVE.load(Ordering::SeqCst) {
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                        continue;
+                    }
+                    
+                    if let Ok(last) = LAST_REQUEST.lock() {
+                        if last.elapsed() > std::time::Duration::from_secs(1) {
+                            MAGNIFIER_ACTIVE.store(false, Ordering::SeqCst);
+                            continue;
+                        }
+                    }
+
+                    let x = *MAGNIFIER_X.lock().unwrap_or_else(|e| e.into_inner());
+                    let y = *MAGNIFIER_Y.lock().unwrap_or_else(|e| e.into_inner());
+                    let size = *MAGNIFIER_SIZE.lock().unwrap_or_else(|e| e.into_inner());
+                    
+                    #[cfg(target_os = "macos")]
+                    {
+                        use core_graphics::display::{CGDisplay, CGRect, CGPoint, CGSize};
+                        let display = CGDisplay::main();
+                        let half_size = size / 2.0;
+                        let rect_x = x - half_size;
+                        let rect_y = y - half_size;
+                        let rect = CGRect::new(&CGPoint::new(rect_x, rect_y), &CGSize::new(size, size));
+                        
+                        if let Some(cg_img) = display.image_for_rect(rect) {
+                            let width = cg_img.width() as u32;
+                            let height = cg_img.height() as u32;
+                            let bytes_per_row = cg_img.bytes_per_row();
+                            let data = cg_img.data();
+                            let bytes = data.bytes();
+                            
+                            let mut rgba_bytes = Vec::with_capacity((width * height * 4) as usize);
+                            for r_y in 0..height {
+                                let row_start = (r_y as usize) * bytes_per_row;
+                                for r_x in 0..width {
+                                    let pixel_start = row_start + (r_x as usize) * 4;
+                                    if pixel_start + 3 < bytes.len() {
+                                        rgba_bytes.push(bytes[pixel_start + 2]); // R
+                                        rgba_bytes.push(bytes[pixel_start + 1]); // G
+                                        rgba_bytes.push(bytes[pixel_start]);     // B
+                                        rgba_bytes.push(bytes[pixel_start + 3]); // A
+                                    } else {
+                                        rgba_bytes.extend_from_slice(&[0, 0, 0, 255]);
+                                    }
+                                }
+                            }
+                            if let Some(img) = image::RgbaImage::from_raw(width, height, rgba_bytes) {
+                                let rgb_image = image::DynamicImage::ImageRgba8(img).into_rgb8();
+                                let mut jpeg_bytes = Vec::new();
+                                if rgb_image.write_to(&mut Cursor::new(&mut jpeg_bytes), image::ImageFormat::Jpeg).is_ok() {
+                                    if let Ok(mut latest) = LATEST_BASE64.lock() {
+                                        *latest = Some(STANDARD.encode(&jpeg_bytes));
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    #[cfg(not(target_os = "macos"))]
+                    {
+                        if monitors.is_empty() {
+                            monitors = xcap::Monitor::all().unwrap_or_default();
+                        }
+                        let mut target_monitor = None;
+                        for m in &monitors {
+                            let mx = m.x().unwrap_or(0) as f64;
+                            let my = m.y().unwrap_or(0) as f64;
+                            let mw = m.width().unwrap_or(0) as f64;
+                            let mh = m.height().unwrap_or(0) as f64;
+                            if x >= mx && x <= mx + mw && y >= my && y <= my + mh {
+                                target_monitor = Some(m.clone());
+                                break;
+                            }
+                        }
+
+                        if let Some(monitor) = target_monitor {
+                            if let Ok(image) = monitor.capture_image() {
+                                let local_x = (x - monitor.x().unwrap_or(0) as f64) as u32;
+                                let local_y = (y - monitor.y().unwrap_or(0) as f64) as u32;
+                                
+                                let mon_w = monitor.width().unwrap_or(1920).max(1) as f64;
+                                let scale = image.width() as f64 / mon_w;
+                                
+                                let scaled_x = (local_x as f64 * scale) as u32;
+                                let scaled_y = (local_y as f64 * scale) as u32;
+                                let scaled_size = (size * scale) as u32;
+                                let half_size = scaled_size / 2;
+
+                                let mut crop_x = scaled_x.saturating_sub(half_size);
+                                let mut crop_y = scaled_y.saturating_sub(half_size);
+                                let mut crop_w = scaled_size;
+                                let mut crop_h = scaled_size;
+
+                                // Clamp bounds to prevent thread panics
+                                if crop_x + crop_w > image.width() {
+                                    crop_w = image.width().saturating_sub(crop_x);
+                                }
+                                if crop_y + crop_h > image.height() {
+                                    crop_h = image.height().saturating_sub(crop_y);
+                                }
+
+                                if crop_w > 0 && crop_h > 0 {
+                                    let cropped = image::imageops::crop_imm(&image, crop_x, crop_y, crop_w, crop_h).to_image();
+                                    let rgb_image = image::DynamicImage::ImageRgba8(cropped).into_rgb8();
+                                    let mut jpeg_bytes = Vec::new();
+                                    if rgb_image.write_to(&mut Cursor::new(&mut jpeg_bytes), image::ImageFormat::Jpeg).is_ok() {
+                                        if let Ok(mut latest) = LATEST_BASE64.lock() {
+                                            *latest = Some(STANDARD.encode(&jpeg_bytes));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Throttle to ~60 FPS
+                    std::thread::sleep(std::time::Duration::from_millis(16));
+                }
+            });
+
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
