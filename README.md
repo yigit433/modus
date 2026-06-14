@@ -5,7 +5,7 @@ Modus is a sleek, lightweight, and minimalist menu bar utility designed for macO
 It allows you to control system settings, display options, and various practical utilities directly from your menu bar with a single click.
 
 <p align="center">
-  <img src="public/screenshot.jpeg" alt="Modus App Screenshot" width="360" style="border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />
+  <img src="public/screenshot.jpeg" alt="Modus App Screenshot" style="border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />
 </p>
 
 ---
