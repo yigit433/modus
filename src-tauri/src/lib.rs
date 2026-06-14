@@ -1,3 +1,4 @@
+#![allow(unexpected_cfgs)]
 use std::process::Child;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -482,6 +483,7 @@ pub fn run() {
             std::thread::spawn(|| {
                 use std::io::Cursor;
                 use base64::{Engine as _, engine::general_purpose::STANDARD};
+                #[cfg(not(target_os = "macos"))]
                 let mut monitors = xcap::Monitor::all().unwrap_or_default();
                 
                 loop {
